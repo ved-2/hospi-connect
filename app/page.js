@@ -1,1054 +1,239 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useState, useMemo } from "react";
+import {
+  Activity, Building2, Users, AlertCircle,
+  TrendingUp, MapPin, Clock, ArrowRight,
+  CheckCircle2, Shield, Zap, Menu, Bell
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 
-const urgencyWeights = {
-  critical: 40,
-  urgent: 28,
-  moderate: 16,
-  routine: 8,
-};
-
-const diseaseCatalog = {
-  cardiac: {
-    label: "Cardiac emergency",
-    specialty: "Cardiology",
-    resourceCategory: "ICU_BED",
-    ambulancePreferred: true,
-  },
-  trauma: {
-    label: "Trauma and injury",
-    specialty: "Trauma Care",
-    resourceCategory: "ICU_BED",
-    ambulancePreferred: true,
-  },
-  respiratory: {
-    label: "Respiratory distress",
-    specialty: "Pulmonology",
-    resourceCategory: "VENTILATOR",
-    ambulancePreferred: true,
-  },
-  neuro: {
-    label: "Neurological symptoms",
-    specialty: "Neurology",
-    resourceCategory: "ICU_BED",
-    ambulancePreferred: false,
-  },
-  maternity: {
-    label: "Maternity care",
-    specialty: "Obstetrics",
-    resourceCategory: "GENERAL_BED",
-    ambulancePreferred: false,
-  },
-  general: {
-    label: "General admission",
-    specialty: "Internal Medicine",
-    resourceCategory: "GENERAL_BED",
-    ambulancePreferred: false,
-  },
-};
-
+// --- Mock Data ---
 const hospitalsSeed = [
-  {
-    id: "h-101",
-    name: "Apex Multispeciality",
-    type: "Private tertiary hospital",
-    city: "South Delhi",
-    distanceKm: 3.4,
-    emergencyStatus: "green",
-    specialties: ["Cardiology", "Pulmonology", "Internal Medicine"],
-    contactChannels: ["Bed Desk", "Emergency Command"],
-    resources: [
-      { category: "ICU_BED", available: 4, total: 18 },
-      { category: "GENERAL_BED", available: 16, total: 60 },
-      { category: "DOCTOR", available: 8, total: 18 },
-      { category: "VENTILATOR", available: 3, total: 10 },
-      { category: "AMBULANCE", available: 2, total: 5 },
-    ],
-    incomingCitizenIds: ["req-301"],
-    emergencyRequests: [
-      {
-        id: "er-01",
-        requestingHospital: "Lotus Care Centre",
-        need: "ICU bed + cardiology specialist",
-        priority: "critical",
-        etaMinutes: 11,
-        status: "Matched",
-      },
-    ],
-  },
-  {
-    id: "h-102",
-    name: "CityCare Government Hospital",
-    type: "Public emergency network hospital",
-    city: "Noida",
-    distanceKm: 7.8,
-    emergencyStatus: "amber",
-    specialties: ["Trauma Care", "Neurology", "Internal Medicine"],
-    contactChannels: ["Trauma Desk", "Transfer Desk"],
-    resources: [
-      { category: "ICU_BED", available: 2, total: 24 },
-      { category: "GENERAL_BED", available: 22, total: 120 },
-      { category: "DOCTOR", available: 11, total: 28 },
-      { category: "VENTILATOR", available: 1, total: 12 },
-      { category: "AMBULANCE", available: 4, total: 6 },
-    ],
-    incomingCitizenIds: ["req-302"],
-    emergencyRequests: [
-      {
-        id: "er-02",
-        requestingHospital: "Metro Heart Unit",
-        need: "Ventilator backup",
-        priority: "urgent",
-        etaMinutes: 24,
-        status: "In transfer",
-      },
-    ],
-  },
-  {
-    id: "h-103",
-    name: "Sunrise Women and Child Institute",
-    type: "Speciality care hospital",
-    city: "Gurugram",
-    distanceKm: 10.6,
-    emergencyStatus: "green",
-    specialties: ["Obstetrics", "Pediatrics", "Internal Medicine"],
-    contactChannels: ["Admission Cell", "Referral Desk"],
-    resources: [
-      { category: "ICU_BED", available: 1, total: 8 },
-      { category: "GENERAL_BED", available: 12, total: 42 },
-      { category: "DOCTOR", available: 5, total: 12 },
-      { category: "VENTILATOR", available: 1, total: 4 },
-      { category: "AMBULANCE", available: 1, total: 2 },
-    ],
-    incomingCitizenIds: [],
-    emergencyRequests: [],
-  },
-  {
-    id: "h-104",
-    name: "Metro Heart and Neuro",
-    type: "Advanced speciality hub",
-    city: "Central Delhi",
-    distanceKm: 5.2,
-    emergencyStatus: "red",
-    specialties: ["Cardiology", "Neurology", "Trauma Care"],
-    contactChannels: ["Command Center", "Ambulance Dock"],
-    resources: [
-      { category: "ICU_BED", available: 1, total: 20 },
-      { category: "GENERAL_BED", available: 9, total: 70 },
-      { category: "DOCTOR", available: 6, total: 20 },
-      { category: "VENTILATOR", available: 2, total: 14 },
-      { category: "AMBULANCE", available: 1, total: 4 },
-    ],
-    incomingCitizenIds: [],
-    emergencyRequests: [
-      {
-        id: "er-03",
-        requestingHospital: "Green Valley Hospital",
-        need: "Stroke-ready ICU transfer",
-        priority: "critical",
-        etaMinutes: 14,
-        status: "Awaiting lock",
-      },
-    ],
-  },
+  { id: "h-1", name: "Apex Multispeciality", city: "South Delhi", status: "green", distance: 3.4, beds: 4, specialty: "Cardiology" },
+  { id: "h-2", name: "CityCare Govt", city: "Noida", status: "amber", distance: 7.8, beds: 2, specialty: "Trauma Care" },
+  { id: "h-3", name: "Metro Heart & Neuro", city: "Central Delhi", status: "red", distance: 5.2, beds: 1, specialty: "Neurology" },
 ];
 
-const citizensSeed = [
-  {
-    id: "cit-1",
-    name: "Riya Sharma",
-    age: 34,
-    gender: "Female",
-    phone: "+91 98XXXXXX41",
-    email: "riya@example.com",
-    homeLocation: "Lajpat Nagar",
-    emergencyContacts: ["Mohit Sharma"],
-    authProfile: "citizen",
-  },
-  {
-    id: "cit-2",
-    name: "Arjun Mehta",
-    age: 56,
-    gender: "Male",
-    phone: "+91 99XXXXXX08",
-    email: "arjun@example.com",
-    homeLocation: "Noida Sector 62",
-    emergencyContacts: ["Naina Mehta"],
-    authProfile: "citizen",
-  },
-];
+// --- Sub-Components ---
 
-const requestsSeed = [
-  {
-    id: "req-301",
-    citizenId: "cit-2",
-    citizenName: "Arjun Mehta",
-    symptomSummary: "Chest pain, shortness of breath, unstable vitals",
-    diseaseCategory: "cardiac",
-    urgencyLevel: "critical",
-    specialtyNeeded: "Cardiology",
-    currentLocation: "Noida Sector 62",
-    preferredRadius: 12,
-    status: "PENDING_HOSPITAL_REVIEW",
-    submittedAt: "2026-03-14T09:12:00Z",
-    selectedHospitalId: "h-101",
-    recommendedHospitalIds: ["h-101", "h-104"],
-  },
-  {
-    id: "req-302",
-    citizenId: "cit-1",
-    citizenName: "Riya Sharma",
-    symptomSummary: "Head injury after road accident",
-    diseaseCategory: "trauma",
-    urgencyLevel: "urgent",
-    specialtyNeeded: "Trauma Care",
-    currentLocation: "AIIMS Flyover",
-    preferredRadius: 10,
-    status: "MATCHED",
-    submittedAt: "2026-03-14T09:18:00Z",
-    selectedHospitalId: "h-102",
-    recommendedHospitalIds: ["h-102", "h-104"],
-  },
-];
-
-const transferSeed = [
-  {
-    id: "tr-11",
-    requestId: "er-02",
-    originHospitalId: "h-104",
-    destinationHospitalId: "h-102",
-    transportType: "Advanced life support ambulance",
-    ambulanceId: "AMB-22",
-    eta: "18 min",
-    handoffStatus: "En route",
-  },
-  {
-    id: "tr-12",
-    requestId: "req-301",
-    originHospitalId: "citizen",
-    destinationHospitalId: "h-101",
-    transportType: "Citizen-arranged",
-    ambulanceId: "Self arrival",
-    eta: "22 min",
-    handoffStatus: "Waiting for hospital review",
-  },
-];
-
-function getResource(resourceList, category) {
-  return resourceList.find((item) => item.category === category);
-}
-
-function scoreHospital(hospital, diseaseCategory, urgencyLevel, preferredRadius, requestIndex) {
-  const profile = diseaseCatalog[diseaseCategory];
-  if (!profile) {
-    return null;
-  }
-
-  const resource = getResource(hospital.resources, profile.resourceCategory);
-  const ambulance = getResource(hospital.resources, "AMBULANCE");
-  const specialtyFit = hospital.specialties.includes(profile.specialty);
-  const activeCapacity = resource && resource.available > 0;
-
-  if (!specialtyFit || !activeCapacity || hospital.distanceKm > preferredRadius) {
-    return null;
-  }
-
-  const capacityScore = resource.available * 6;
-  const specialtyScore = 30;
-  const distanceScore = Math.max(0, 24 - hospital.distanceKm * 2);
-  const urgencyScore = urgencyWeights[urgencyLevel] || 0;
-  const ambulanceScore = profile.ambulancePreferred && ambulance?.available ? 8 : 0;
-  const loadPenalty = hospital.emergencyStatus === "red" ? 10 : hospital.emergencyStatus === "amber" ? 4 : 0;
-  const priorityTimePenalty = requestIndex * 3;
-  const matchScore =
-    specialtyScore +
-    capacityScore +
-    distanceScore +
-    urgencyScore +
-    ambulanceScore -
-    loadPenalty -
-    priorityTimePenalty;
-
-  return {
-    hospitalId: hospital.id,
-    matchScore,
-    distanceKm: hospital.distanceKm,
-    specialtyFit,
-    capacityFit: `${resource.available}/${resource.total} ${profile.resourceCategory.replace("_", " ").toLowerCase()}s`,
-    estimatedResponseTime: `${Math.round(hospital.distanceKm * 4 + (hospital.emergencyStatus === "red" ? 12 : 6))} min`,
-    recommendationReason: `${profile.specialty} ready, ${resource.available} ${profile.resourceCategory.replace("_", " ").toLowerCase()} slots live`,
-  };
-}
-
-function rankHospitals(hospitals, diseaseCategory, urgencyLevel, preferredRadius, requestIndex = 0) {
-  return hospitals
-    .map((hospital) =>
-      scoreHospital(hospital, diseaseCategory, urgencyLevel, preferredRadius, requestIndex),
-    )
-    .filter(Boolean)
-    .sort((left, right) => right.matchScore - left.matchScore || left.distanceKm - right.distanceKm);
-}
-
-function formatStatus(status) {
-  return status.replaceAll("_", " ").toLowerCase();
-}
-
-function formatTimestamp(timestamp) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
-}
-
-function LandingHero({ onJump }) {
-  return (
-    <section className="hero-shell">
-      <div className="hero-copy">
-        <span className="eyebrow">Unified emergency and admission command</span>
-        <h1>HospiConnect turns fragmented hospital capacity into a live care network.</h1>
-        <p>
-          Hospitals share real-time beds, doctors, ambulances, and equipment. Citizens
-          describe what they need, and the platform routes them to the best available
-          hospital based on specialty fit, urgency, capacity, and distance.
-        </p>
-        <div className="cta-row">
-          <button className="primary-btn" onClick={() => onJump("citizen")}>
-            Open citizen portal
-          </button>
-          <button className="ghost-btn" onClick={() => onJump("hospital")}>
-            View hospital ops
-          </button>
-        </div>
+const StatCard = ({ icon: Icon, label, value, trend, color }) => (
+  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition">
+    <div className="flex justify-between items-start mb-4">
+      <div className={`p-2 rounded-xl ${color}`}>
+        <Icon className="w-6 h-6" />
       </div>
-      <div className="hero-panel">
-        <div className="hero-grid">
-          <div>
-            <strong>4</strong>
-            <span>Hospitals broadcasting live capacity</span>
-          </div>
-          <div>
-            <strong>2-sided</strong>
-            <span>Citizen intake plus inter-hospital coordination</span>
-          </div>
-          <div>
-            <strong>Priority aware</strong>
-            <span>Triage severity wins before first-come fallback</span>
-          </div>
-          <div>
-            <strong>Real-time</strong>
-            <span>Recommendations shift as resource states change</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+      <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg">{trend}</span>
+    </div>
+    <h3 className="text-slate-500 text-sm font-medium">{label}</h3>
+    <p className="text-2xl font-bold text-slate-900">{value}</p>
+  </div>
+);
 
-function SummaryStrip({ requests, hospitals }) {
-  const criticalCount = requests.filter((request) => request.urgencyLevel === "critical").length;
-  const pendingCount = requests.filter((request) => request.status === "PENDING_HOSPITAL_REVIEW").length;
-  const totalBeds = hospitals.reduce((sum, hospital) => {
-    const icu = getResource(hospital.resources, "ICU_BED");
-    return sum + (icu?.available || 0);
-  }, 0);
+// --- Main Page Component ---
+
+export default function LandingPage() {
+  const [activePortal, setActivePortal] = useState("citizen");
+  const [location, setLocation] = useState("Lajpat Nagar, Delhi");
 
   return (
-    <section className="summary-strip">
-      <article>
-        <span>Live ICU beds</span>
-        <strong>{totalBeds}</strong>
-      </article>
-      <article>
-        <span>Citizen requests in flow</span>
-        <strong>{requests.length}</strong>
-      </article>
-      <article>
-        <span>Critical priority cases</span>
-        <strong>{criticalCount}</strong>
-      </article>
-      <article>
-        <span>Pending hospital reviews</span>
-        <strong>{pendingCount}</strong>
-      </article>
-    </section>
-  );
-}
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
 
-function CitizenPortal({
-  citizens,
-  hospitals,
-  requests,
-  draftRequest,
-  setDraftRequest,
-  activeCitizenId,
-  setActiveCitizenId,
-  recommendations,
-  onSubmitRequest,
-}) {
-  const activeCitizen = citizens.find((citizen) => citizen.id === activeCitizenId) || citizens[0];
-  const trackedRequests = requests.filter((request) => request.citizenId === activeCitizen.id);
 
-  return (
-    <section className="portal-grid" id="citizen">
-      <div className="panel citizen-panel">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Citizen Portal</span>
-            <h2>Find the right hospital before reaching a dead end.</h2>
-          </div>
-          <select
-            value={activeCitizen.id}
-            onChange={(event) => setActiveCitizenId(event.target.value)}
-            className="portal-select"
+      {/* Hero Section */}
+      <header className="pt-32 pb-16 px-4">
+        <div className="max-w-4xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold mb-6 border border-blue-100"
           >
-            {citizens.map((citizen) => (
-              <option key={citizen.id} value={citizen.id}>
-                {citizen.name}
-              </option>
-            ))}
-          </select>
+            <Zap size={14} fill="currentColor" />
+            LIVE CAPACITY BROADCASTING ENABLED
+          </motion.div>
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="text-5xl md:text-6xl font-extrabold tracking-tight mb-6 leading-[1.1]"
+          >
+            Every second counts. <br />
+            <span className="text-blue-600 underline decoration-blue-200 underline-offset-8">Direct routing</span> saves lives.
+          </motion.h1 >
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-lg text-slate-600 mb-10 max-w-2xl mx-auto"
+          >
+            HospiConnect turns fragmented hospital data into a real-time care network.
+            Find open ICU beds, specialized trauma units, and live ambulances in one click.
+          </motion.p>
         </div>
+      </header>
 
-        <div className="card-stack">
-          <article className="card tinted-card">
-            <div className="card-head">
-              <h3>{activeCitizen.name}</h3>
-              <span>{activeCitizen.homeLocation}</span>
-            </div>
-            <p>
-              Separate citizen login with request tracking, recommendation history, and
-              admission updates without exposing hospital dashboards.
-            </p>
-          </article>
+      {/* Bento Stats */}
+      <section className="max-w-7xl mx-auto px-4 mb-20 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard icon={Building2} label="Partner Hospitals" value="142" trend="+12%" color="bg-blue-100 text-blue-600" />
+        <StatCard icon={Users} label="Active Requests" value="1,284" trend="+4%" color="bg-orange-100 text-orange-600" />
+        <StatCard icon={Activity} label="Live ICU Beds" value="84" trend="-2%" color="bg-green-100 text-green-600" />
+        <StatCard icon={Clock} label="Avg. Routing Time" value="4.2m" trend="-18%" color="bg-purple-100 text-purple-600" />
+      </section>
 
-          <article className="card">
-            <div className="card-head">
-              <h3>Admission intake</h3>
-              <span>Symptom-aware matching</span>
-            </div>
-            <div className="form-grid">
-              <label>
-                Disease or care need
-                <select
-                  value={draftRequest.diseaseCategory}
-                  onChange={(event) =>
-                    setDraftRequest((current) => ({
-                      ...current,
-                      diseaseCategory: event.target.value,
-                      specialtyNeeded: diseaseCatalog[event.target.value].specialty,
-                    }))
-                  }
-                >
-                  {Object.entries(diseaseCatalog).map(([key, value]) => (
-                    <option key={key} value={key}>
-                      {value.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Urgency
-                <select
-                  value={draftRequest.urgencyLevel}
-                  onChange={(event) =>
-                    setDraftRequest((current) => ({
-                      ...current,
-                      urgencyLevel: event.target.value,
-                    }))
-                  }
-                >
-                  {Object.keys(urgencyWeights).map((level) => (
-                    <option key={level} value={level}>
-                      {level}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Current location
-                <input
-                  value={draftRequest.currentLocation}
-                  onChange={(event) =>
-                    setDraftRequest((current) => ({
-                      ...current,
-                      currentLocation: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Preferred radius (km)
-                <input
-                  type="number"
-                  min="2"
-                  max="30"
-                  value={draftRequest.preferredRadius}
-                  onChange={(event) =>
-                    setDraftRequest((current) => ({
-                      ...current,
-                      preferredRadius: Number(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-            </div>
-            <label>
-              Symptom summary
-              <textarea
-                rows="4"
-                value={draftRequest.symptomSummary}
-                onChange={(event) =>
-                  setDraftRequest((current) => ({
-                    ...current,
-                    symptomSummary: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <button className="primary-btn full-width" onClick={onSubmitRequest}>
-              Submit admission request
+      {/* Main Interactive Section */}
+      <section className="max-w-7xl mx-auto px-4 pb-32">
+        <div className="bg-white rounded-[32px] border border-slate-200 shadow-2xl overflow-hidden">
+          {/* Tabs */}
+          <div className="flex border-b border-slate-100 bg-slate-50/50 p-2">
+            <button
+              onClick={() => setActivePortal("citizen")}
+              className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold transition ${activePortal === 'citizen' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <Users size={18} /> Citizen Portal
             </button>
-          </article>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Hospital Recommendations</span>
-            <h2>Ranked by fit, distance, live capacity, and urgency.</h2>
+            <button
+              onClick={() => setActivePortal("hospital")}
+              className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold transition ${activePortal === 'hospital' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <Building2 size={18} /> Hospital Operations
+            </button>
           </div>
-          <span className="chip">{recommendations.length} hospitals live</span>
-        </div>
-        <div className="card-stack">
-          {recommendations.length ? (
-            recommendations.map((match, index) => {
-              const hospital = hospitals.find((item) => item.id === match.hospitalId);
-              return (
-                <article className="card recommendation-card" key={match.hospitalId}>
-                  <div className="card-head">
+
+          <div className="p-8 md:p-12">
+            <AnimatePresence mode="wait">
+              {activePortal === "citizen" ? (
+                <motion.div
+                  key="citizen"
+                  initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
+                  className="grid grid-cols-1 lg:grid-cols-12 gap-12"
+                >
+                  {/* Left: Search Form */}
+                  <div className="lg:col-span-5 space-y-8">
                     <div>
-                      <h3>
-                        #{index + 1} {hospital.name}
+                      <h2 className="text-2xl font-bold mb-2">Find Emergency Care</h2>
+                      <p className="text-slate-500 text-sm">Real-time matching based on symptoms and location.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Emergency Type</label>
+                        <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition">
+                          <option>Cardiac (Heart Distress)</option>
+                          <option>Trauma (Accident)</option>
+                          <option>Maternity Care</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Current Location</label>
+                        <div className="relative">
+                          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                          <input
+                            value={location}
+                            onChange={(e) => setLocation(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+                      <button className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2">
+                        Scan Local Network <ArrowRight size={18} />
+                      </button>
+                    </div>
+
+                    <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 flex gap-4">
+                      <AlertCircle className="text-orange-600 shrink-0" />
+                      <p className="text-xs text-orange-800 leading-relaxed">
+                        <b>Critical Notice:</b> High volume reported in North Delhi due to local incidents. Expect slight delays in ambulance dispatch.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right: Live Results */}
+                  <div className="lg:col-span-7 space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-bold flex items-center gap-2">
+                        Recommended Facilities <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest">3 Live Matches</span>
                       </h3>
-                      <span>
-                        {hospital.city} · {hospital.type}
-                      </span>
+                      <button className="text-xs text-blue-600 font-bold hover:underline">View Map</button>
                     </div>
-                    <span className={`status-badge status-${hospital.emergencyStatus}`}>
-                      {hospital.emergencyStatus}
-                    </span>
+
+                    {hospitalsSeed.map((hospital, i) => (
+                      <div key={hospital.id} className={`p-5 rounded-2xl border transition-all ${i === 0 ? 'border-blue-200 bg-blue-50/30 ring-1 ring-blue-100' : 'border-slate-100 hover:border-slate-200 bg-white shadow-sm'}`}>
+                        <div className="flex justify-between items-start">
+                          <div className="flex gap-4">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${hospital.status === 'green' ? 'bg-green-100 text-green-600' : hospital.status === 'amber' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}>
+                              #{i + 1}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-900">{hospital.name}</h4>
+                              <p className="text-sm text-slate-500">{hospital.city} • {hospital.specialty}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-slate-900">{hospital.distance} km</div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Distance</div>
+                          </div>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                          <div className="flex gap-6">
+                            <div className="flex items-center gap-2 text-xs font-semibold">
+                              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                              {hospital.beds} ICU Beds Avail.
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                              <Clock size={14} /> 12m Response
+                            </div>
+                          </div>
+                          <button className="bg-white border border-slate-200 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50 transition">
+                            Details
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="metric-row">
-                    <div>
-                      <strong>{match.matchScore}</strong>
-                      <span>match score</span>
-                    </div>
-                    <div>
-                      <strong>{match.distanceKm} km</strong>
-                      <span>distance</span>
-                    </div>
-                    <div>
-                      <strong>{match.estimatedResponseTime}</strong>
-                      <span>estimated arrival</span>
-                    </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="hospital"
+                  initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }}
+                  className="flex flex-col items-center justify-center py-20 text-center"
+                >
+                  <div className="bg-blue-50 p-6 rounded-full mb-6">
+                    <Building2 className="w-12 h-12 text-blue-600" />
                   </div>
-                  <p>{match.recommendationReason}</p>
-                  <p className="muted-copy">
-                    Capacity: {match.capacityFit}. Specialties: {hospital.specialties.join(", ")}.
+                  <h2 className="text-3xl font-extrabold mb-4">Central Dashboard for Facilities</h2>
+                  <p className="text-slate-500 max-w-lg mx-auto mb-8">
+                    Broadcast your live bed count, manage emergency handoffs, and coordinate with the city-wide ambulance network.
                   </p>
-                </article>
-              );
-            })
-          ) : (
-            <article className="card">
-              <h3>No live match inside the selected radius.</h3>
-              <p>
-                Increase radius or let the hospital network escalate to a transfer
-                coordinator for a wider search.
-              </p>
-            </article>
-          )}
-
-          <article className="card">
-            <div className="card-head">
-              <h3>Request tracker</h3>
-              <span>{trackedRequests.length} requests</span>
-            </div>
-            {trackedRequests.map((request) => (
-              <div className="tracker-item" key={request.id}>
-                <div>
-                  <strong>{diseaseCatalog[request.diseaseCategory].label}</strong>
-                  <span>
-                    {request.specialtyNeeded} · {formatTimestamp(request.submittedAt)}
-                  </span>
-                </div>
-                <span className="chip muted-chip">{formatStatus(request.status)}</span>
-              </div>
-            ))}
-          </article>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HospitalPortal({
-  hospitals,
-  requests,
-  transfers,
-  activeHospitalId,
-  setActiveHospitalId,
-  onReviewRequest,
-}) {
-  const hospital = hospitals.find((item) => item.id === activeHospitalId) || hospitals[0];
-  const incomingRequests = requests.filter((request) => request.selectedHospitalId === hospital.id);
-  const relatedTransfers = transfers.filter((transfer) => transfer.destinationHospitalId === hospital.id);
-
-  return (
-    <section className="portal-grid reverse-grid" id="hospital">
-      <div className="panel">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Hospital Operations Portal</span>
-            <h2>Monitor capacity, citizen demand, and network transfers.</h2>
-          </div>
-          <select
-            value={hospital.id}
-            onChange={(event) => setActiveHospitalId(event.target.value)}
-            className="portal-select"
-          >
-            {hospitals.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <article className="card">
-          <div className="card-head">
-            <div>
-              <h3>{hospital.name}</h3>
-              <span>
-                {hospital.type} · {hospital.city}
-              </span>
-            </div>
-            <span className={`status-badge status-${hospital.emergencyStatus}`}>
-              {hospital.emergencyStatus}
-            </span>
-          </div>
-          <div className="resource-grid">
-            {hospital.resources.map((resource) => (
-              <div className="resource-tile" key={resource.category}>
-                <strong>{resource.available}</strong>
-                <span>{resource.category.replaceAll("_", " ")}</span>
-                <small>of {resource.total} total</small>
-              </div>
-            ))}
-          </div>
-          <p className="muted-copy">
-            Live specialties: {hospital.specialties.join(", ")}. Channels:{" "}
-            {hospital.contactChannels.join(", ")}.
-          </p>
-        </article>
-
-        <article className="card">
-          <div className="card-head">
-            <h3>Incoming citizen admissions</h3>
-            <span>{incomingRequests.length} requests</span>
-          </div>
-          {incomingRequests.length ? (
-            incomingRequests.map((request) => (
-              <div className="queue-card" key={request.id}>
-                <div>
-                  <strong>{request.citizenName}</strong>
-                  <span>
-                    {request.specialtyNeeded} · {request.urgencyLevel} · {formatStatus(request.status)}
-                  </span>
-                </div>
-                <p>{request.symptomSummary}</p>
-                <div className="inline-actions">
-                  <button
-                    className="small-btn accept-btn"
-                    onClick={() => onReviewRequest(request.id, "ACCEPTED")}
-                  >
-                    Accept
-                  </button>
-                  <button
-                    className="small-btn redirect-btn"
-                    onClick={() => onReviewRequest(request.id, "REDIRECTED")}
-                  >
-                    Redirect
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="muted-copy">No citizen requests currently routed to this hospital.</p>
-          )}
-        </article>
-      </div>
-
-      <div className="panel">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Network Coordination</span>
-            <h2>Emergency requests and transfer command stay on the same platform.</h2>
-          </div>
-          <span className="chip">{hospital.emergencyRequests.length} emergency flows</span>
-        </div>
-        <div className="card-stack">
-          <article className="card">
-            <div className="card-head">
-              <h3>Inter-hospital emergencies</h3>
-              <span>Shared ops queue</span>
-            </div>
-            {hospital.emergencyRequests.length ? (
-              hospital.emergencyRequests.map((request) => (
-                <div className="tracker-item" key={request.id}>
-                  <div>
-                    <strong>{request.need}</strong>
-                    <span>
-                      {request.requestingHospital} · ETA {request.etaMinutes} min
-                    </span>
+                  <div className="flex gap-4">
+                    <button className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 transition shadow-xl shadow-slate-200">
+                      Enter Dashboard
+                    </button>
+                    <button className="bg-white border border-slate-200 px-8 py-3 rounded-xl font-bold hover:bg-slate-50 transition">
+                      View Protocol
+                    </button>
                   </div>
-                  <span className="chip muted-chip">{request.priority}</span>
-                </div>
-              ))
-            ) : (
-              <p className="muted-copy">No active emergency escalations for this hospital.</p>
-            )}
-          </article>
-
-          <article className="card">
-            <div className="card-head">
-              <h3>Transfer management</h3>
-              <span>{relatedTransfers.length} linked transfers</span>
-            </div>
-            {relatedTransfers.map((transfer) => (
-              <div className="tracker-item" key={transfer.id}>
-                <div>
-                  <strong>{transfer.transportType}</strong>
-                  <span>
-                    {transfer.ambulanceId} · {transfer.eta}
-                  </span>
-                </div>
-                <span className="chip muted-chip">{transfer.handoffStatus}</span>
-              </div>
-            ))}
-          </article>
-
-          <article className="card tinted-card">
-            <div className="card-head">
-              <h3>Manual override policy</h3>
-              <span>For contention and downtime</span>
-            </div>
-            <p>
-              If two citizen requests compete for the same scarce resource, the platform
-              locks capacity for the higher triage case first, then falls back to request
-              timestamp and the next-best hospital suggestion.
-            </p>
-          </article>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
-    </section>
-  );
-}
+      </section>
 
-function AdminPanel({ requests, hospitals, transfers }) {
-  const accepted = requests.filter((request) => request.status === "ACCEPTED").length;
-  const redirected = requests.filter((request) => request.status === "REDIRECTED").length;
-
-  return (
-    <section className="admin-shell" id="admin">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Platform Admin Portal</span>
-          <h2>Proposal-ready overview, risk notes, and rollout metrics.</h2>
+      {/* Trust Footer */}
+      <footer className="bg-white border-t border-slate-200 py-12">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-8">
+          <div className="flex items-center gap-2 font-bold text-slate-400">
+            <Activity size={20} />
+            HOSPICONNECT NETWORK © 2026
+          </div>
+          <div className="flex gap-12 text-xs font-bold text-slate-400 tracking-widest uppercase">
+            <div className="flex items-center gap-2"><Shield size={16} /> ISO 27001 Certified</div>
+            <div className="flex items-center gap-2"><CheckCircle2 size={16} /> HIPAA Compliant</div>
+            <div className="flex items-center gap-2"><TrendingUp size={16} /> Real-time Nodes</div>
+          </div>
         </div>
-      </div>
-      <div className="admin-grid">
-        <article className="card">
-          <div className="card-head">
-            <h3>Why this exists</h3>
-            <span>Problem statement</span>
-          </div>
-          <p>
-            The healthcare ecosystem operates in silos. Beds, doctors, ambulances, and
-            critical equipment stay trapped inside disconnected hospital systems, while
-            citizens make calls blindly during emergencies.
-          </p>
-        </article>
-        <article className="card">
-          <div className="card-head">
-            <h3>Stakeholders</h3>
-            <span>Citizen + hospital + admin</span>
-          </div>
-          <p>
-            Citizens submit pre-admission requests. Hospitals broadcast capacity and review
-            requests. Platform admins monitor fairness, service health, and cross-network
-            coordination rules.
-          </p>
-        </article>
-        <article className="card">
-          <div className="card-head">
-            <h3>Impact metrics</h3>
-            <span>Demo KPIs</span>
-          </div>
-          <div className="metric-row">
-            <div>
-              <strong>{accepted}</strong>
-              <span>accepted citizen requests</span>
-            </div>
-            <div>
-              <strong>{redirected}</strong>
-              <span>redirected without dead-end</span>
-            </div>
-            <div>
-              <strong>{transfers.length}</strong>
-              <span>transfer workflows tracked</span>
-            </div>
-          </div>
-        </article>
-        <article className="card">
-          <div className="card-head">
-            <h3>Architecture snapshot</h3>
-            <span>Implementation direction</span>
-          </div>
-          <p>
-            Next.js powers citizen, hospital, and admin surfaces. A matching service ranks
-            hospitals from live resource data. Role-aware APIs handle admission requests,
-            reviews, transfer status, and notifications.
-          </p>
-        </article>
-        <article className="card">
-          <div className="card-head">
-            <h3>Privacy and risk</h3>
-            <span>MVP boundaries</span>
-          </div>
-          <p>
-            The MVP stops at recommendation and hospital review. It does not diagnose,
-            process insurance, or directly edit hospital EHR records. Hospitals stay in
-            control of final acceptance.
-          </p>
-        </article>
-        <article className="card">
-          <div className="card-head">
-            <h3>Rollout phases</h3>
-            <span>Phased roadmap</span>
-          </div>
-          <p>
-            Phase 1 validates shared capacity visibility and citizen routing. Phase 2 adds
-            stronger real-time sync and audit trails. Phase 3 can add insurance, deeper
-            EHR integration, and ambulance orchestration.
-          </p>
-        </article>
-      </div>
-      <div className="footer-note">
-        <span>{hospitals.length} hospitals live in this demo</span>
-        <span>{requests.length} citizen requests simulated</span>
-        <span>{transfers.length} active transfers</span>
-      </div>
-    </section>
-  );
-}
-
-export default function Home() {
-  const [citizens] = useState(citizensSeed);
-  const [hospitals, setHospitals] = useState(hospitalsSeed);
-  const [requests, setRequests] = useState(requestsSeed);
-  const [transfers, setTransfers] = useState(transferSeed);
-  const [activeCitizenId, setActiveCitizenId] = useState(citizensSeed[0].id);
-  const [activeHospitalId, setActiveHospitalId] = useState(hospitalsSeed[0].id);
-  const [draftRequest, setDraftRequest] = useState({
-    diseaseCategory: "cardiac",
-    urgencyLevel: "urgent",
-    currentLocation: "Lajpat Nagar",
-    preferredRadius: 12,
-    symptomSummary: "Recurring chest discomfort and dizziness",
-    specialtyNeeded: diseaseCatalog.cardiac.specialty,
-  });
-
-  const recommendations = useMemo(
-    () =>
-      rankHospitals(
-        hospitals,
-        draftRequest.diseaseCategory,
-        draftRequest.urgencyLevel,
-        draftRequest.preferredRadius,
-        requests.length,
-      ),
-    [draftRequest, hospitals, requests.length],
-  );
-
-  function jumpTo(sectionId) {
-    const section = document.getElementById(sectionId);
-    section?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  function onSubmitRequest() {
-    const citizen = citizens.find((item) => item.id === activeCitizenId) || citizens[0];
-    const matches = rankHospitals(
-      hospitals,
-      draftRequest.diseaseCategory,
-      draftRequest.urgencyLevel,
-      draftRequest.preferredRadius,
-      requests.length,
-    );
-
-    const topMatch = matches[0];
-    const nextRequest = {
-      id: `req-${400 + requests.length + 1}`,
-      citizenId: citizen.id,
-      citizenName: citizen.name,
-      symptomSummary: draftRequest.symptomSummary,
-      diseaseCategory: draftRequest.diseaseCategory,
-      urgencyLevel: draftRequest.urgencyLevel,
-      specialtyNeeded: diseaseCatalog[draftRequest.diseaseCategory].specialty,
-      currentLocation: draftRequest.currentLocation,
-      preferredRadius: draftRequest.preferredRadius,
-      status: topMatch ? "PENDING_HOSPITAL_REVIEW" : "REDIRECTED",
-      submittedAt: new Date().toISOString(),
-      selectedHospitalId: topMatch?.hospitalId || null,
-      recommendedHospitalIds: matches.map((match) => match.hospitalId),
-    };
-
-    setRequests((current) => [nextRequest, ...current]);
-
-    if (topMatch) {
-      setHospitals((current) =>
-        current.map((hospital) => {
-          if (hospital.id !== topMatch.hospitalId) {
-            return hospital;
-          }
-
-          const category = diseaseCatalog[draftRequest.diseaseCategory].resourceCategory;
-          return {
-            ...hospital,
-            incomingCitizenIds: [nextRequest.id, ...hospital.incomingCitizenIds],
-            resources: hospital.resources.map((resource) =>
-              resource.category === category
-                ? { ...resource, available: Math.max(0, resource.available - 1) }
-                : resource,
-            ),
-          };
-        }),
-      );
-
-      setTransfers((current) => [
-        {
-          id: `tr-${40 + current.length + 1}`,
-          requestId: nextRequest.id,
-          originHospitalId: "citizen",
-          destinationHospitalId: topMatch.hospitalId,
-          transportType: diseaseCatalog[draftRequest.diseaseCategory].ambulancePreferred
-            ? "Ambulance coordination requested"
-            : "Citizen-arranged arrival",
-          ambulanceId: diseaseCatalog[draftRequest.diseaseCategory].ambulancePreferred
-            ? "Dispatch pending"
-            : "Self arrival",
-          eta: topMatch.estimatedResponseTime,
-          handoffStatus: "Admission request submitted",
-        },
-        ...current,
-      ]);
-      setActiveHospitalId(topMatch.hospitalId);
-    }
-
-    setDraftRequest((current) => ({
-      ...current,
-      symptomSummary: "",
-    }));
-  }
-
-  function onReviewRequest(requestId, nextStatus) {
-    let updatedRequest;
-    setRequests((current) =>
-      current.map((request) => {
-        if (request.id !== requestId) {
-          return request;
-        }
-
-        updatedRequest = {
-          ...request,
-          status: nextStatus,
-        };
-        return updatedRequest;
-      }),
-    );
-
-    if (!updatedRequest) {
-      return;
-    }
-
-    setTransfers((current) =>
-      current.map((transfer) =>
-        transfer.requestId === requestId
-          ? {
-              ...transfer,
-              handoffStatus:
-                nextStatus === "ACCEPTED" ? "Hospital accepted patient" : "Redirecting to fallback",
-            }
-          : transfer,
-      ),
-    );
-
-    if (nextStatus === "REDIRECTED") {
-      const fallback = rankHospitals(
-        hospitals.filter((hospital) => hospital.id !== updatedRequest.selectedHospitalId),
-        updatedRequest.diseaseCategory,
-        updatedRequest.urgencyLevel,
-        updatedRequest.preferredRadius,
-        0,
-      )[0];
-
-      if (!fallback) {
-        return;
-      }
-
-      setRequests((current) =>
-        current.map((request) =>
-          request.id === requestId
-            ? {
-                ...request,
-                selectedHospitalId: fallback.hospitalId,
-                recommendedHospitalIds: [fallback.hospitalId, ...request.recommendedHospitalIds],
-              }
-            : request,
-        ),
-      );
-      setActiveHospitalId(fallback.hospitalId);
-    }
-  }
-
-  return (
-    <main className="page-shell">
-      <LandingHero onJump={jumpTo} />
-      <SummaryStrip requests={requests} hospitals={hospitals} />
-      <CitizenPortal
-        citizens={citizens}
-        hospitals={hospitals}
-        requests={requests}
-        draftRequest={draftRequest}
-        setDraftRequest={setDraftRequest}
-        activeCitizenId={activeCitizenId}
-        setActiveCitizenId={setActiveCitizenId}
-        recommendations={recommendations}
-        onSubmitRequest={onSubmitRequest}
-      />
-      <HospitalPortal
-        hospitals={hospitals}
-        requests={requests}
-        transfers={transfers}
-        activeHospitalId={activeHospitalId}
-        setActiveHospitalId={setActiveHospitalId}
-        onReviewRequest={onReviewRequest}
-      />
-      <AdminPanel requests={requests} hospitals={hospitals} transfers={transfers} />
-    </main>
+      </footer>
+    </div>
   );
 }
