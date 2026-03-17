@@ -1,0 +1,13 @@
+﻿Analyzing ambulance_app...                                      
+
+   info - Don't invoke 'print' in production code - lib\screens\dashboard_screen.dart:21:5 - avoid_print
+   info - The private field _showDebug could be 'final' - lib\screens\dashboard_screen.dart:43:8 - prefer_final_fields
+warning - The value of the field '_showDebug' isn't used - lib\screens\dashboard_screen.dart:43:8 - unused_field
+   info - The 'child' argument should be last in widget constructor invocations - lib\screens\dashboard_screen.dart:355:15 - sort_child_properties_last
+  error - Expected to find ']' - lib\screens\dashboard_screen.dart:417:7 - expected_token
+  error - The named parameter 'bottomNavigationBar' isn't defined - lib\screens\dashboard_screen.dart:418:7 - undefined_named_parameter
+  error - Expected to find ')' - lib\screens\dashboard_screen.dart:437:6 - expected_token
+  error - Expected to find ']' - lib\screens\dashboard_screen.dart:437:6 - expected_token
+   info - The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\screens\login_screen.dart:2:8 - unnecessary_import
+   info - Use 'const' for final variables initialized to a constant value - lib\services\location_service.dart:62:7 - prefer_const_declarations
+

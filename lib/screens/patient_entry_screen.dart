@@ -31,10 +31,11 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
         _ageCtrl.text.trim().isEmpty ||
         _selectedCondition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all required fields'),
-          backgroundColor: Color(0xFFE53935),
+        SnackBar(
+          content: const Text('FILL ALL REQUIRED FIELDS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+          backgroundColor: const Color(0xFFFF3B30),
           behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
       return;
@@ -61,20 +62,26 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const red = Color(0xFFE53935);
+    const primaryRed = Color(0xFFFF3B30);
+    const bgColor = Color(0xFF0B0E14);
+    const surfaceColor = Color(0xFF161B26);
+    const inputColor = Color(0xFF1C2333);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: red,
-        foregroundColor: Colors.white,
-        title: const Text('Patient Details',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: bgColor,
+        title: const Text('PATIENT INTAKE',
+            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 14)),
         centerTitle: true,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -82,43 +89,43 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1565C0).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFF007AFF).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                    color: const Color(0xFF1565C0).withOpacity(0.3)),
+                    color: const Color(0xFF007AFF).withValues(alpha: 0.2)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline,
-                      color: Color(0xFF1565C0), size: 20),
-                  SizedBox(width: 10),
+                  const Icon(Icons.info_outline_rounded,
+                      color: Color(0xFF007AFF), size: 18),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'Enter patient details to find the best matched hospital based on condition & resource availability.',
                       style: TextStyle(
-                          color: Color(0xFF1565C0), fontSize: 13),
+                          color: const Color(0xFF007AFF).withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
-            _sectionTitle('Patient Information'),
-            const SizedBox(height: 12),
+            _sectionTitle('PATIENT INFORMATION'),
+            const SizedBox(height: 16),
             _card(
               child: Column(
                 children: [
                   _textField(
                     controller: _nameCtrl,
-                    label: 'Patient Name *',
+                    label: 'PATIENT NAME *',
                     hint: 'Full name',
-                    icon: Icons.person_outline,
+                    icon: Icons.person_outline_rounded,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
                   _textField(
                     controller: _ageCtrl,
-                    label: 'Age *',
+                    label: 'AGE *',
                     hint: 'e.g. 45',
                     icon: Icons.cake_outlined,
                     keyboardType: TextInputType.number,
@@ -127,22 +134,25 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
               ),
             ),
 
-            const SizedBox(height: 24),
-            _sectionTitle('Condition & Severity'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 32),
+            _sectionTitle('CONDITION & SEVERITY'),
+            const SizedBox(height: 16),
             _card(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Select Condition / Disease *',
+                  const Text('SELECT CONDITION *',
                       style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF555555))),
-                  const SizedBox(height: 8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white24,
+                          letterSpacing: 1)),
+                  const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: _selectedCondition,
-                    hint: const Text('Choose condition'),
+                    hint: Text('Choose condition', style: TextStyle(color: Colors.white.withValues(alpha: 0.2))),
+                    dropdownColor: inputColor,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
                     decoration: _inputDeco('', Icons.medical_information_outlined),
                     items: DiseaseMapper.allConditions
                         .map((c) => DropdownMenuItem(
@@ -157,49 +167,52 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
 
                   // Show resource needs
                   if (_selectedCondition != null) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     _resourceChips(
                         DiseaseMapper.getRequirements(_selectedCondition!)),
                   ],
 
-                  const SizedBox(height: 18),
-                  const Text('Severity *',
+                  const SizedBox(height: 24),
+                  const Text('SEVERITY LEVEL *',
                       style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF555555))),
-                  const SizedBox(height: 8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white24,
+                          letterSpacing: 1)),
+                  const SizedBox(height: 10),
                   Row(
                     children: _severities.map((s) {
                       final selected = s == _severity;
                       final color = s == 'Critical'
-                          ? const Color(0xFFE53935)
+                          ? primaryRed
                           : s == 'Moderate'
-                              ? const Color(0xFFFF8F00)
-                              : const Color(0xFF2E7D32);
+                              ? const Color(0xFFFFCC00)
+                              : const Color(0xFF32D74B);
                       return Expanded(
                         child: GestureDetector(
                           onTap: () => setState(() => _severity = s),
                           child: Container(
                             margin:
-                                const EdgeInsets.symmetric(horizontal: 3),
+                                const EdgeInsets.symmetric(horizontal: 4),
                             padding:
-                                const EdgeInsets.symmetric(vertical: 12),
+                                const EdgeInsets.symmetric(vertical: 14),
                             decoration: BoxDecoration(
                               color: selected
                                   ? color
-                                  : color.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
+                                  : color.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                  color: color.withOpacity(0.5)),
+                                  color: selected ? color : color.withValues(alpha: 0.3),
+                                  width: selected ? 2 : 1),
                             ),
                             child: Center(
-                              child: Text(s,
+                              child: Text(s.toUpperCase(),
                                   style: TextStyle(
                                       color:
                                           selected ? Colors.white : color,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13)),
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 11,
+                                      letterSpacing: 0.5)),
                             ),
                           ),
                         ),
@@ -210,40 +223,46 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
               ),
             ),
 
-            const SizedBox(height: 24),
-            _sectionTitle('Pickup Location'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 32),
+            _sectionTitle('PICKUP LOCATION'),
+            const SizedBox(height: 16),
             _card(
               child: _textField(
                 controller: _locationCtrl,
-                label: 'Current Location *',
+                label: 'CURRENT LOCATION *',
                 hint: 'Area / landmark',
                 icon: Icons.location_on_outlined,
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
+              height: 60,
+              child: ElevatedButton(
                 onPressed: _findHospitals,
-                icon: const Icon(Icons.search_rounded, size: 24),
-                label: const Text('FIND BEST HOSPITAL',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: red,
+                  backgroundColor: primaryRed,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  elevation: 4,
+                      borderRadius: BorderRadius.circular(20)),
+                  elevation: 0,
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.search_rounded, size: 22),
+                    SizedBox(width: 10),
+                    Text('FIND BEST HOSPITAL',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5)),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -252,21 +271,17 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
 
   Widget _sectionTitle(String t) => Text(t,
       style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF1A1A2E)));
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          color: Colors.white38,
+          letterSpacing: 2));
 
   Widget _card({required Widget child}) => Container(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4))
-          ],
+          color: const Color(0xFF161B26),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         child: child,
       );
@@ -283,15 +298,16 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
       children: [
         Text(label,
             style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF555555))),
-        const SizedBox(height: 8),
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: Colors.white24,
+                letterSpacing: 1)),
+        const SizedBox(height: 10),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
           decoration: _inputDeco(hint, icon),
-          style: const TextStyle(fontSize: 14),
+          style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -299,54 +315,60 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
 
   InputDecoration _inputDeco(String hint, IconData icon) => InputDecoration(
         hintText: hint,
-        prefixIcon: Icon(icon, color: Colors.grey, size: 20),
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.15)),
+        prefixIcon: Icon(icon, color: Colors.white24, size: 20),
         filled: true,
-        fillColor: const Color(0xFFF5F6FA),
+        fillColor: const Color(0xFF1C2333),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide:
-              const BorderSide(color: Color(0xFFE53935), width: 1.5),
+              const BorderSide(color: Color(0xFFFF3B30), width: 1.5),
         ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       );
 
   Widget _resourceChips(ResourceRequirement req) {
     final chips = <_Chip>[];
-    if (req.needsICU)
-      chips.add(_Chip('ICU Bed', const Color(0xFFE53935)));
-    if (req.needsVentilator)
-      chips.add(_Chip('Ventilator', const Color(0xFF6A1B9A)));
-    if (req.needsOxygenBed)
-      chips.add(_Chip('Oxygen Bed', const Color(0xFF1565C0)));
-    if (req.needsEmergencyOT)
-      chips.add(_Chip('Emergency OT', const Color(0xFFE65100)));
-    chips.add(_Chip(req.specialDept, const Color(0xFF2E7D32)));
+    if (req.needsICU) {
+      chips.add(_Chip('ICU Bed', const Color(0xFFFF3B30)));
+    }
+    if (req.needsVentilator) {
+      chips.add(_Chip('Ventilator', const Color(0xFFAF52DE)));
+    }
+    if (req.needsOxygenBed) {
+      chips.add(_Chip('Oxygen Bed', const Color(0xFF007AFF)));
+    }
+    if (req.needsEmergencyOT) {
+      chips.add(_Chip('Emergency OT', const Color(0xFFFF9500)));
+    }
+    chips.add(_Chip(req.specialDept, const Color(0xFF32D74B)));
 
     return Wrap(
       spacing: 8,
-      runSpacing: 6,
+      runSpacing: 8,
       children: chips
           .map((c) => Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: c.color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: c.color.withOpacity(0.4)),
+                  color: c.color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: c.color.withValues(alpha: 0.3)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.check_circle, size: 13, color: c.color),
-                  const SizedBox(width: 5),
-                  Text(c.label,
+                  Icon(Icons.check_circle_rounded, size: 12, color: c.color),
+                  const SizedBox(width: 6),
+                  Text(c.label.toUpperCase(),
                       style: TextStyle(
                           color: c.color,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600))
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5))
                 ]),
               ))
           .toList(),

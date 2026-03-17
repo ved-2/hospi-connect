@@ -71,6 +71,16 @@ class Hospital {
   });
 }
 
+extension HospitalLoad on Hospital {
+  double get loadPercent {
+    final total = icuTotal + ventilatorsTotal + oxygenBedsTotal;
+    final available = icuAvailable + ventilatorsAvailable + oxygenBedsAvailable;
+    if (total <= 0) return 1.0;
+    final occupiedRatio = 1 - (available / total);
+    return occupiedRatio.clamp(0.0, 1.0);
+  }
+}
+
 // ─────────────────────────────────────────────
 //  DISEASE → RESOURCE MAPPING
 // ─────────────────────────────────────────────
@@ -168,7 +178,36 @@ class DiseaseMapper {
       List<Hospital> hospitals, ResourceRequirement req) {
     // Already ranked by matchScore; just return sorted
     return [...hospitals]
-      ..sort((a, b) => b.matchScore.compareTo(a.matchScore));
+      ..sort((a, b) {
+        final scoreCmp = b.matchScore.compareTo(a.matchScore);
+        if (scoreCmp != 0) return scoreCmp;
+        final distCmp = a.distanceKm.compareTo(b.distanceKm);
+        if (distCmp != 0) return distCmp;
+        return a.loadPercent.compareTo(b.loadPercent);
+      });
+  }
+
+  static double computeScore(
+    ResourceRequirement req,
+    int icuAvail, int icuTotal,
+    int ventAvail, int ventTotal,
+    int oxyAvail, int oxyTotal,
+    bool ot,
+    List<String> specs,
+    double dist,
+  ) {
+    double score = 0;
+    if (req.needsICU) score += icuAvail > 0 ? 30 : -20;
+    if (req.needsVentilator) score += ventAvail > 0 ? 25 : -15;
+    if (req.needsOxygenBed) score += oxyAvail > 0 ? 15 : -10;
+    if (req.needsEmergencyOT) score += ot ? 15 : -10;
+    if (specs.contains(req.specialDept)) score += 20;
+    final total = icuTotal + ventTotal + oxyTotal;
+    final available = icuAvail + ventAvail + oxyAvail;
+    final loadPercent = total > 0 ? 1 - (available / total) : 1.0;
+    score -= dist * 3.0; // closer = better
+    score -= (loadPercent.clamp(0.0, 1.0) * 20); // penalize high load
+    return score.clamp(0, 100);
   }
 }
 
@@ -189,7 +228,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Cardiology', 'Neurology', 'Trauma Surgery', 'Critical Care'],
         phone: '+91-20-26163391',
-        matchScore: _score(req, 3, 2, 6, true,
+        matchScore: DiseaseMapper.computeScore(req, 3, 10, 2, 5, 6, 15, true,
             ['Cardiology', 'Neurology', 'Trauma Surgery', 'Critical Care'], 2.1),
       ),
       Hospital(
@@ -203,7 +242,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Cardiology', 'Pulmonology', 'Nephrology', 'Obstetrics & Gynaecology'],
         phone: '+91-20-66814444',
-        matchScore: _score(req, 1, 0, 4, true,
+        matchScore: DiseaseMapper.computeScore(req, 1, 8, 0, 4, 4, 12, true,
             ['Cardiology', 'Pulmonology', 'Nephrology', 'Obstetrics & Gynaecology'], 2.8),
       ),
       Hospital(
@@ -217,7 +256,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Trauma Surgery', 'Pulmonology', 'Critical Care', 'Burns & Plastic Surgery'],
         phone: '+91-20-26126300',
-        matchScore: _score(req, 5, 4, 10, true,
+        matchScore: DiseaseMapper.computeScore(req, 5, 20, 4, 10, 10, 30, true,
             ['Trauma Surgery', 'Pulmonology', 'Critical Care', 'Burns & Plastic Surgery'], 3.5),
       ),
       Hospital(
@@ -231,7 +270,7 @@ class MockData {
         hasEmergencyOT: false,
         specialties: ['Neurology', 'Endocrinology', 'Emergency Medicine', 'General Medicine'],
         phone: '+91-20-67210000',
-        matchScore: _score(req, 2, 1, 8, false,
+        matchScore: DiseaseMapper.computeScore(req, 2, 12, 1, 6, 8, 20, false,
             ['Neurology', 'Endocrinology', 'Emergency Medicine', 'General Medicine'], 4.2),
       ),
       Hospital(
@@ -245,7 +284,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Nephrology', 'Obstetrics & Gynaecology', 'Cardiology', 'Critical Care'],
         phone: '+91-20-49153000',
-        matchScore: _score(req, 4, 3, 12, true,
+        matchScore: DiseaseMapper.computeScore(req, 4, 15, 3, 8, 12, 25, true,
             ['Nephrology', 'Obstetrics & Gynaecology', 'Cardiology', 'Critical Care'], 5.7),
       ),
       Hospital(
@@ -259,26 +298,11 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['General Medicine', 'Emergency Medicine'],
         phone: '+91-20-26128000',
-        matchScore: _score(req, 0, 0, 2, true,
+        matchScore: DiseaseMapper.computeScore(req, 0, 18, 0, 7, 2, 22, true,
             ['General Medicine', 'Emergency Medicine'], 1.5),
       ),
     ];
 
     return raw..sort((a, b) => b.matchScore.compareTo(a.matchScore));
-  }
-
-  static double _score(
-    ResourceRequirement req,
-    int icu, int vent, int oxy, bool ot,
-    List<String> specs, double dist,
-  ) {
-    double score = 0;
-    if (req.needsICU) score += icu > 0 ? 30 : -20;
-    if (req.needsVentilator) score += vent > 0 ? 25 : -15;
-    if (req.needsOxygenBed) score += oxy > 0 ? 15 : -10;
-    if (req.needsEmergencyOT) score += ot ? 15 : -10;
-    if (specs.contains(req.specialDept)) score += 20;
-    score -= dist * 1.5; // closer = better
-    return score.clamp(0, 100);
   }
 }
