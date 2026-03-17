@@ -7,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'services/firebase_service.dart';
 import 'utils/app_logger.dart';
-mport 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
