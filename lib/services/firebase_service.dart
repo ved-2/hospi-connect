@@ -22,6 +22,11 @@ class FirebaseService {
       final map = <String, LatLng>{};
       for (final doc in snapshot.docs) {
         final data = doc.data();
+        
+        // Skip ambulances currently occupied with an emergency
+        final bool isBusy = data['isBusy'] == true;
+        if (isBusy) continue;
+        
         final lat = data['gpsLat'];
         final lng = data['gpsLng'];
         if (lat is num && lng is num) {
@@ -48,28 +53,52 @@ class FirebaseService {
       AppLogger.log('Firestore NOT available in getPendingEmergencies');
       return const Stream.empty();
     }
-    AppLogger.log('Starting getPendingEmergencies stream...');
+    
+    // We strictly only want real recent SOS requests, NOT old demo dataset trips
+    final cutoffTimestamp = Timestamp.fromDate(DateTime.now().subtract(const Duration(minutes: 15)));
+    
+    AppLogger.log('Starting getPendingEmergencies stream (Filtering for NEW SOS only)...');
     return _firestore!
         .collection('emergencies')
         .where('status', whereIn: ['pending', 'incoming'])
         .snapshots()
         .map((snapshot) {
-          AppLogger.log('Firestore Snapshot: ${snapshot.docs.length} pending emergencies found in DB.');
+          AppLogger.log('Firestore Snapshot: ${snapshot.docs.length} pending docs found.');
           final list = snapshot.docs
               .map((doc) {
                 try {
-                  final model = EmergencyModel.fromFirestore(doc);
-                  AppLogger.log('Parsed Emergency: ${model.id}, transport=${model.transportType}');
-                  return model;
+                  final data = doc.data();
+                  
+                  // Very strict local filter to bypass ancient demo database records
+                  final docCreatedAt = data['createdAt'];
+                  if (docCreatedAt == null) return null; // Ignore if no timestamp
+                  
+                  DateTime docTime;
+                  if (docCreatedAt is Timestamp) {
+                    docTime = docCreatedAt.toDate();
+                  } else {
+                    docTime = DateTime.parse(docCreatedAt.toString());
+                  }
+
+                  if (docTime.isBefore(DateTime.now().subtract(const Duration(minutes: 15)))) {
+                     AppLogger.log('Hard filtering out stale database record: ${doc.id}');
+                     return null; // Ignore
+                  }
+
+                  AppLogger.log('Checking doc ${doc.id}: status=${data['status']}, transport=${data['transportType']}');
+                  return EmergencyModel.fromFirestore(doc);
                 } catch (e) {
                   AppLogger.log('Failed to parse emergency ${doc.id}: $e');
                   return null;
                 }
               })
               .whereType<EmergencyModel>()
-              .where((emergency) => emergency.transportType == 'ambulance')
+              .where((emergency) {
+                bool isAmb = emergency.transportType == 'ambulance';
+                if (!isAmb) AppLogger.log('Filtering out ${emergency.id}: Transport is ${emergency.transportType}');
+                return isAmb;
+              })
               .toList();
-          AppLogger.log('Filtered List: ${list.length} emergencies match "ambulance" transport.');
           return list;
         }).handleError((error) {
           AppLogger.log('STREAM ERROR in getPendingEmergencies: $error');
@@ -235,7 +264,9 @@ class FirebaseService {
     try {
       await _firestore!.collection('emergencies').doc(emergencyId).update({
         'status': EmergencyStatus.completed.value,
+        'completedAt': FieldValue.serverTimestamp(), // Permanently flag as completed
       });
+      AppLogger.log('Successfully completed and sealed emergency $emergencyId');
     } catch (e) {
       AppLogger.log('Error completing emergency: $e');
     }
@@ -252,6 +283,18 @@ class FirebaseService {
     } catch (e) {
       // Avoid spamming logs if permission is missing, just print once
       AppLogger.log('Error updating ambulance location (Rule issue?): $e');
+    }
+  }
+
+  Future<void> updateAmbulanceStatus(String ambulanceId, bool isBusy) async {
+    if (_firestore == null) return;
+    try {
+      await _firestore!.collection('ambulances').doc(ambulanceId).set({
+        'isBusy': isBusy,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      AppLogger.log('Error updating ambulance status: $e');
     }
   }
 
