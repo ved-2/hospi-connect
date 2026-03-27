@@ -140,6 +140,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         ? (fallbackName.isEmpty ? 'Driver' : fallbackName)
         : driverName;
 
-    return DashboardScreen(ambulanceId: ambulanceId, driverName: resolvedName);
+    return DashboardScreen(
+      ambulanceId: ambulanceId,
+      driverName: resolvedName,
+      uid: _user!.uid,
+    );
   }
 }

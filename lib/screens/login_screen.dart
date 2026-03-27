@@ -50,6 +50,7 @@ class _LoginScreenState extends State<LoginScreen>
     try {
       String ambulanceId;
       String driverName;
+      String currentUid = '';
 
       if (Firebase.apps.isNotEmpty) {
         final email = _usernameCtrl.text.trim();
@@ -63,6 +64,7 @@ class _LoginScreenState extends State<LoginScreen>
         if (user == null) {
           throw Exception('Auth failed: no user');
         }
+        currentUid = user.uid;
 
         final docRef =
             FirebaseFirestore.instance.collection('ambulances').doc(user.uid);
@@ -91,6 +93,7 @@ class _LoginScreenState extends State<LoginScreen>
           builder: (_) => DashboardScreen(
             ambulanceId: ambulanceId,
             driverName: driverName,
+            uid: currentUid,
           ),
         ),
       );

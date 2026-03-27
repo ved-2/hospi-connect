@@ -1,17 +1,17 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/emergency_model.dart';
+import '../models/models.dart';
 import '../services/firebase_service.dart';
 import '../services/location_service.dart';
-import 'login_screen.dart';
 import 'history_screen.dart';
+import 'profile_screen.dart';
 // --- Design System Colors ---
 class AppColors {
   static const Color background = Color(0xFF0F172A); // Deep Slate
@@ -27,10 +27,12 @@ class AppColors {
 class DashboardScreen extends StatefulWidget {
   final String ambulanceId;
   final String driverName;
+  final String uid;
 
   static final StreamController<String> logController = StreamController<String>.broadcast();
+  static final Set<String> completedTrips = {};
   static void log(String msg) {
-    print('DEBUG: $msg');
+    debugPrint('DEBUG: $msg');
     logController.add(msg);
   }
 
@@ -38,6 +40,7 @@ class DashboardScreen extends StatefulWidget {
     super.key,
     required this.ambulanceId,
     required this.driverName,
+    required this.uid,
   });
 
   @override
@@ -53,30 +56,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription? _ambulanceSubscription;
   StreamSubscription? _debugLogSubscription;
   final List<String> _debugLogs = [];
-  bool _showDebug = true;
+  late String _currentAmbulanceId;
   
   ll.LatLng? _currentLocation;
   final Map<String, ll.LatLng> _ambulanceLocations = {};
-  List<ll.LatLng> _routePoints = [];
-  String? _distanceText;
+  List<ll.LatLng> _routePointsLeg1 = [];
+  List<ll.LatLng> _routePointsLeg2 = [];
   String? _etaText;
   
   EmergencyModel? _activeEmergency;
+  Hospital? _targetHospital; // The hospital with most beds & best match
+  String? _toPatientEta;
+  String? _toHospitalEta;
+  double _distMetersLeg1 = 0;
+  double _distMetersLeg2 = 0;
+  int _secondsLeg1 = 0;
+  int _secondsLeg2 = 0;
   final Set<String> _shownDialogs = {};
   final MapController _mapController = MapController();
-  final DateTime _sessionStart = DateTime.now();
 
-  static const Duration _recentWindow = Duration(minutes: 5); // Only show SOS from last 5 minutes
   static const double _maxDistanceMeters = 50000000; // Practically unlimited for demo
 
   @override
   void initState() {
     super.initState();
+    _currentAmbulanceId = widget.ambulanceId;
     _debugLogSubscription = DashboardScreen.logController.stream.listen((msg) {
       if (mounted) setState(() => _debugLogs.insert(0, msg));
     });
-    DashboardScreen.log('Init Dashboard for ${widget.ambulanceId}');
-    _firebaseService.updateAmbulanceStatus(widget.ambulanceId, false); // Broadcast as strictly available
+    DashboardScreen.log('Init Dashboard for $_currentAmbulanceId (UID: ${widget.uid})');
+    _firebaseService.updateAmbulanceStatus(widget.uid, false); // Use UID consistently
     _startLocationService();
     _listenForAmbulanceLocations();
   }
@@ -96,26 +105,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_currentLocation != null && mounted) {
       DashboardScreen.log('Initial location found: ${_currentLocation!.latitude}, ${_currentLocation!.longitude}');
       setState(() {}); 
-      _firebaseService.updateAmbulanceLocation(widget.ambulanceId, _currentLocation!);
+      _firebaseService.updateAmbulanceLocation(widget.uid, _currentLocation!);
     } else {
       DashboardScreen.log('Initial location search returned null.');
     }
 
     DashboardScreen.log('Subscribing to live location stream...');
+    // Restore active mission if exists
+    _restoreActiveMission();
+    
     _locationSubscription = _locationService.getLocationStream().listen((loc) {
       if (mounted) {
         setState(() => _currentLocation = loc);
-        _firebaseService.updateAmbulanceLocation(widget.ambulanceId, loc);
+        _firebaseService.updateAmbulanceLocation(widget.uid, loc);
         
-        // Update route and ETA if on an active mission
         if (_activeEmergency != null) {
-          _fetchRoute(loc, ll.LatLng(_activeEmergency!.latitude, _activeEmergency!.longitude));
+          final isPatientOnboard = _activeEmergency!.status.index >= EmergencyStatus.patientOnboard.index;
+          if (isPatientOnboard) {
+            if (_activeEmergency!.hospitalLat != null) {
+              _fetchLeg1(loc, ll.LatLng(_activeEmergency!.hospitalLat!, _activeEmergency!.hospitalLng!));
+              // Clear Leg 2 once patient is onboard to avoid overlapping lines
+              if (_routePointsLeg2.isNotEmpty) {
+                setState(() => _routePointsLeg2 = []);
+              }
+            }
+          } else {
+            _fetchLeg1(loc, ll.LatLng(_activeEmergency!.latitude, _activeEmergency!.longitude));
+          }
         }
       }
     });
 
-    // Start listening for emergencies ONLY AFTER we've attempted to get a location!
     _listenForEmergencies();
+  }
+
+  Future<void> _restoreActiveMission() async {
+    final active = await _firebaseService.getActiveEmergencyForDriver(_currentAmbulanceId);
+    if (active != null && mounted) {
+      DashboardScreen.log('Restoring active mission: ${active.id}');
+      Hospital? hospital;
+      if (active.hospitalId != null) {
+        hospital = await _firebaseService.getHospitalById(active.hospitalId!);
+      }
+      
+      setState(() {
+        _activeEmergency = active;
+        _targetHospital = hospital;
+      });
+
+      if (_currentLocation != null) {
+        _fetchLeg1(
+          _currentLocation!, 
+          ll.LatLng(active.latitude, active.longitude)
+        );
+        if (active.hospitalLat != null) {
+          _fetchLeg2(
+            ll.LatLng(active.latitude, active.longitude),
+            ll.LatLng(active.hospitalLat!, active.hospitalLng!)
+          );
+        }
+      }
+    }
+  }
+
+  void _fitRouteBounds() {
+    final allPoints = [..._routePointsLeg1, ..._routePointsLeg2];
+    if (allPoints.isEmpty) return;
+    
+    var minLat = allPoints[0].latitude;
+    var maxLat = allPoints[0].latitude;
+    var minLng = allPoints[0].longitude;
+    var maxLng = allPoints[0].longitude;
+    
+    for (var p in allPoints) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds(
+          ll.LatLng(minLat, minLng),
+          ll.LatLng(maxLat, maxLng),
+        ),
+        padding: const EdgeInsets.all(50),
+      ),
+    );
   }
 
   void _listenForEmergencies() {
@@ -130,7 +207,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         DashboardScreen.log('Location is null. Evaluating emergencies without sequence blocking.');
       }
 
-      final distance = const ll.Distance();
+      const distance = ll.Distance();
       DashboardScreen.log('Scanning ${emergencies.length} candidate emergencies...');
 
       final candidates = emergencies.where((e) {
@@ -201,24 +278,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool _isNearestAmbulanceForEmergency(
       EmergencyModel emergency, ll.LatLng myLocation) {
-    if (_ambulanceLocations.isEmpty) return true;
+    if (_ambulanceLocations.isEmpty) {
+      DashboardScreen.log('Targeting: No other ambulances found in registry. I am the only candidate.');
+      return true;
+    }
+    
     final target = ll.LatLng(emergency.latitude, emergency.longitude);
-    final distance = const ll.Distance();
-    var nearestId = widget.ambulanceId;
+    const distance = ll.Distance();
+    
     var nearestDistance = distance(myLocation, target);
+    
+    DashboardScreen.log('Self check: $_currentAmbulanceId is ${nearestDistance.toStringAsFixed(1)}m from target.');
+
+    bool someoneElseIsCloser = false;
+    String closerId = '';
+    double closerDist = 0;
 
     _ambulanceLocations.forEach((id, loc) {
+      if (id == widget.uid) return; // FIX: Correctly exclude self using UID
+      
       final d = distance(loc, target);
-      if (d < nearestDistance) {
-        nearestDistance = d;
-        nearestId = id;
+      // Added a 5-meter tolerance to favor the ACTIVE driver in case of stale/identical demo data
+      if (d < (nearestDistance - 5)) {
+        someoneElseIsCloser = true;
+        closerId = id;
+        closerDist = d;
       }
     });
 
-    return nearestId == widget.ambulanceId;
+    if (someoneElseIsCloser) {
+       DashboardScreen.log('NEAREST CHECK FAILED: Ambulance $closerId is closer (${closerDist.toStringAsFixed(1)}m) than me (${nearestDistance.toStringAsFixed(1)}m)');
+       return false;
+    }
+
+    DashboardScreen.log('NEAREST CHECK PASSED: I am the closest available unit.');
+    return true;
   }
 
-  Future<void> _fetchRoute(ll.LatLng start, ll.LatLng end) async {
+  Future<void> _fetchLeg1(ll.LatLng start, ll.LatLng end) async {
     final url = 'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson';
     try {
       final response = await http.get(Uri.parse(url));
@@ -227,30 +324,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (data['routes'] != null && (data['routes'] as List).isNotEmpty) {
           final route = data['routes'][0];
           final coordinates = route['geometry']['coordinates'] as List;
-          
           final double distance = (route['distance'] as num).toDouble();
           final double duration = (route['duration'] as num).toDouble();
-
-          String distStr = distance < 1000 
-              ? '${distance.toStringAsFixed(0)} m' 
-              : '${(distance / 1000).toStringAsFixed(1)} km';
-              
-          int minutes = (duration / 60).round();
-          String timeStr = minutes < 1 ? '< 1 min' : '$minutes min';
-
           if (mounted) {
             setState(() {
-              _routePoints = coordinates
+              _routePointsLeg1 = coordinates
                   .map((c) => ll.LatLng(c[1] as double, c[0] as double))
                   .toList();
-              _distanceText = distStr;
-              _etaText = timeStr;
+              
+              _distMetersLeg1 = distance;
+              _secondsLeg1 = duration.round();
+              
+              bool isPatientOnboard = _activeEmergency != null && _activeEmergency!.status.index >= EmergencyStatus.patientOnboard.index;
+              
+              if (isPatientOnboard) {
+                _toHospitalEta = _formatDuration(_secondsLeg1);
+                _toPatientEta = "Arrived";
+              } else {
+                _toPatientEta = _formatDuration(_secondsLeg1);
+                // Total duration to hospital via patient
+                _toHospitalEta = _formatDuration(_secondsLeg1 + _secondsLeg2);
+              }
             });
+            _fitRouteBounds();
           }
         }
       }
     } catch (e) {
-      DashboardScreen.log('Error fetching route: $e');
+      DashboardScreen.log('Error fetching leg 1: $e');
+    }
+  }
+
+  Future<void> _fetchLeg2(ll.LatLng start, ll.LatLng end) async {
+    final url = 'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson';
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['routes'] != null && (data['routes'] as List).isNotEmpty) {
+          final route = data['routes'][0];
+          final coordinates = route['geometry']['coordinates'] as List;
+          if (mounted) {
+            setState(() {
+              _routePointsLeg2 = coordinates
+                  .map((c) => ll.LatLng(c[1] as double, c[0] as double))
+                  .toList();
+              _distMetersLeg2 = (route['distance'] as num).toDouble();
+              _secondsLeg2 = (route['duration'] as num).round();
+              _toHospitalEta = _formatDuration(_secondsLeg1 + _secondsLeg2);
+            });
+            _fitRouteBounds();
+          }
+        }
+      }
+    } catch (e) {
+      DashboardScreen.log('Error fetching leg 2: $e');
     }
   }
 
@@ -324,13 +452,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   onPressed: () async {
                     Navigator.pop(context);
-                    await _firebaseService.acceptEmergency(emergency.id, widget.ambulanceId);
-                    await _firebaseService.updateAmbulanceStatus(widget.ambulanceId, true); // Mark as BUSY network-wide
+                    
+                    // Extract numeric minutes from _etaText (e.g. "15 min" -> 15)
+                    int? estimatedMinutes;
+                    if (_etaText != null) {
+                      final match = RegExp(r'(\d+)').firstMatch(_etaText!);
+                      if (match != null) {
+                        estimatedMinutes = int.tryParse(match.group(1)!);
+                      }
+                    }
+
+                    // 1. Identify best hospital based on symptoms and proximity
+                    final req = DiseaseMapper.getRequirements(emergency.symptoms);
+                    final hospitals = await _firebaseService.fetchHospitals(req, userLocation: ll.LatLng(emergency.latitude, emergency.longitude));
+                    final bestHospital = hospitals.isNotEmpty ? hospitals.first : null;
+
+                    await _firebaseService.acceptEmergency(
+                      emergency.id, 
+                      _currentAmbulanceId,
+                      eta: estimatedMinutes,
+                    );
+
+                    // Update emergency with hospital info
+                    if (bestHospital != null) {
+                      await FirebaseFirestore.instance.collection('emergencies').doc(emergency.id).update({
+                        'hospitalId': bestHospital.id,
+                        'hospitalName': bestHospital.name,
+                        'hospitalAddress': bestHospital.address,
+                        'hospitalLat': bestHospital.latitude,
+                        'hospitalLng': bestHospital.longitude,
+                      });
+                    }
+
+                    await _firebaseService.updateAmbulanceStatus(widget.uid, true); 
+                    
+                    final updatedEmergency = emergency.copyWith(
+                        status: EmergencyStatus.accepted,
+                        eta: estimatedMinutes,
+                        hospitalId: bestHospital?.id,
+                        hospitalName: bestHospital?.name,
+                        hospitalAddress: bestHospital?.address,
+                        hospitalLat: bestHospital?.latitude,
+                        hospitalLng: bestHospital?.longitude,
+                    );
+
                     setState(() {
-                      _activeEmergency = emergency.copyWith(status: EmergencyStatus.accepted);
+                      _targetHospital = bestHospital;
+                      _activeEmergency = updatedEmergency;
                     });
+
                     if (_currentLocation != null) {
-                      _fetchRoute(_currentLocation!, ll.LatLng(emergency.latitude, emergency.longitude));
+                      _fetchLeg1(_currentLocation!, ll.LatLng(updatedEmergency.latitude, updatedEmergency.longitude));
+                      if (updatedEmergency.hospitalLat != null) {
+                         _fetchLeg2(
+                           ll.LatLng(updatedEmergency.latitude, updatedEmergency.longitude),
+                           ll.LatLng(updatedEmergency.hospitalLat!, updatedEmergency.hospitalLng!)
+                         );
+                      }
                     }
                   },
                   child: const Text('ACCEPT', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
@@ -413,7 +591,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Row(
                           children: [
-                            Text(widget.ambulanceId.toUpperCase(), 
+                            Text(_currentAmbulanceId.toUpperCase(), 
                               style: const TextStyle(
                                 color: AppColors.textPrimary, 
                                 fontSize: 15, 
@@ -486,17 +664,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           children: [
                             TileLayer(
-                             urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                              urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                             ),
-                            if (_routePoints.isNotEmpty)
+                            if (_routePointsLeg2.isNotEmpty)
                               PolylineLayer(
                                 polylines: [
                                   Polyline(
-                                    points: _routePoints,
-                                    strokeWidth: 5.0,
-                                    color: AppColors.accentBlue,
-                                    borderColor: Colors.white.withValues(alpha: 0.8),
-                                    borderStrokeWidth: 2.0,
+                                    points: _routePointsLeg2,
+                                    strokeWidth: 8.0,
+                                    color: Colors.blue.withValues(alpha: 0.6),
+                                    strokeCap: StrokeCap.round,
+                                    strokeJoin: StrokeJoin.round,
+                                  ),
+                                ],
+                              ),
+                            if (_routePointsLeg1.isNotEmpty)
+                              PolylineLayer(
+                                polylines: [
+                                  Polyline(
+                                    points: _routePointsLeg1,
+                                    strokeWidth: 20.0, // Maximum visibility
+                                    color: Colors.blueAccent, 
+                                    strokeCap: StrokeCap.round,
+                                    strokeJoin: StrokeJoin.round,
                                   ),
                                 ],
                               ),
@@ -504,33 +694,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               markers: [
                                 Marker(
                                   point: _currentLocation!,
-                                  width: 60,
-                                  height: 60,
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Container(
-                                        width: 30, height: 30,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.accentBlue.withValues(alpha: 0.2),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const Icon(Icons.navigation_rounded, color: AppColors.accentBlue, size: 36),
-                                    ],
+                                  width: 50,
+                                  height: 50,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                                      ],
+                                    ),
+                                    child: const Icon(Icons.local_shipping_rounded, color: AppColors.primaryRed, size: 30),
                                   ),
                                 ),
-                                if (_activeEmergency != null)
+                                if (_activeEmergency != null) ...[
+                                  // Patient Marker
                                   Marker(
                                     point: ll.LatLng(_activeEmergency!.latitude, _activeEmergency!.longitude),
                                     width: 50,
                                     height: 50,
-                                    child: const Icon(Icons.location_on_rounded, color: AppColors.primaryRed, size: 48),
+                                    child: const Icon(Icons.person_pin_circle_rounded, color: AppColors.primaryRed, size: 40),
                                   ),
+                                  // Hospital Marker (if set)
+                                  if (_activeEmergency!.hospitalLat != null && _activeEmergency!.hospitalLat != 0)
+                                    Marker(
+                                      point: ll.LatLng(_activeEmergency!.hospitalLat!, _activeEmergency!.hospitalLng!),
+                                      width: 50,
+                                      height: 50,
+                                      child: const Icon(Icons.local_hospital_rounded, color: Color(0xFF3B82F6), size: 48),
+                                    ),
+                                ],
                               ],
                             ),
                           ],
                         ),
+                        
+                        _buildTopStatusBanner(),
                         
                         // Map Controls (Right Side)
                         Positioned(
@@ -563,140 +762,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
 
-                        // Floating Active Mission Banner (Bottom)
+                        // Expanded Trip Details (Taller for visibility)
                         if (_activeEmergency != null)
                           Positioned(
-                            left: 16,
-                            right: 16,
-                            bottom: 16,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.surfaceLight),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.4), 
-                                    blurRadius: 20, 
-                                    offset: const Offset(0, 10)
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(20),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                      color: AppColors.primaryRed.withValues(alpha: 0.1),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.shield_rounded, color: AppColors.primaryRed, size: 16),
-                                          const SizedBox(width: 8),
-                                          const Text('ACTIVE MISSION', 
-                                            style: TextStyle(color: AppColors.primaryRed, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.2)),
-                                          const Spacer(),
-                                          Text(_activeEmergency!.status.value.toUpperCase(), 
-                                            style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold, fontSize: 10)),
-                                        ],
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(20),
-                                      child: Column(
-                                        children: [
-                                          Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(_activeEmergency!.patientName, 
-                                                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
-                                                    const SizedBox(height: 6),
-                                                    Text(_activeEmergency!.symptoms, 
-                                                      style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w500, fontSize: 14)),
-                                                    const SizedBox(height: 12),
-                                                    Row(
-                                                      children: [
-                                                        if (_distanceText != null)
-                                                          _miniBadge(Icons.straighten_rounded, _distanceText!, AppColors.accentBlue),
-                                                        if (_distanceText != null && _etaText != null)
-                                                          const SizedBox(width: 8),
-                                                        if (_etaText != null)
-                                                          _miniBadge(Icons.timer_rounded, _etaText!, AppColors.successGreen),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              Material(
-                                                color: AppColors.surfaceLight,
-                                                borderRadius: BorderRadius.circular(12),
-                                                child: InkWell(
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  onTap: () { /* Call Action */ },
-                                                  child: const Padding(
-                                                    padding: EdgeInsets.all(12),
-                                                    child: Icon(Icons.call_rounded, color: AppColors.successGreen, size: 24),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 20),
-                                          if (_activeEmergency!.status == EmergencyStatus.accepted)
-                                            SizedBox(
-                                              width: double.infinity,
-                                              child: ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: AppColors.accentBlue,
-                                                  foregroundColor: Colors.white,
-                                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                  elevation: 0,
-                                                ),
-                                                onPressed: () async {
-                                                  await _firebaseService.updateEmergencyStatus(_activeEmergency!.id, EmergencyStatus.arrived);
-                                                  setState(() {
-                                                    _activeEmergency = _activeEmergency!.copyWith(status: EmergencyStatus.arrived);
-                                                  });
-                                                },
-                                                child: const Text('ARRIVED AT SCENE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-                                              )
-                                            ),
-                                          if (_activeEmergency!.status == EmergencyStatus.arrived)
-                                            SizedBox(
-                                              width: double.infinity,
-                                              child: ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: AppColors.successGreen,
-                                                  foregroundColor: Colors.white,
-                                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                  elevation: 0,
-                                                ),
-                                                onPressed: () async {
-                                                  await _firebaseService.completeEmergency(_activeEmergency!.id);
-                                                  await _firebaseService.updateAmbulanceStatus(widget.ambulanceId, false); // Mark available network-wide
-                                                  setState(() {
-                                                    _activeEmergency = null;
-                                                    _routePoints = []; 
-                                                    _distanceText = null;
-                                                    _etaText = null;
-                                                  });
-                                                },
-                                                child: const Text('MISSION COMPLETED', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-                                              )
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            left: 0, right: 0, bottom: 0,
+                            child: SingleChildScrollView(
+                              child: _buildRichTripDetails(),
                             ),
                           ),
                       ],
@@ -722,20 +793,244 @@ class _DashboardScreenState extends State<DashboardScreen> {
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.explore_rounded), label: 'DASHBOARD'),
             BottomNavigationBarItem(icon: Icon(Icons.history_toggle_off_rounded), label: 'HISTORY'),
-            BottomNavigationBarItem(icon: Icon(Icons.logout_rounded), label: 'LOGOUT'),
+            BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'PROFILE'),
           ],
           onTap: (i) async {
             if (i == 1) {
               Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryScreen(ambulanceId: widget.ambulanceId)));
             }
             if (i == 2) {
-               await _firebaseService.updateAmbulanceStatus(widget.ambulanceId, false);
-               FirebaseAuth.instance.signOut();
+              Navigator.push(context, MaterialPageRoute<String>(builder: (_) => ProfileScreen(
+                uid: widget.uid,
+                driverName: widget.driverName,
+                initialAmbulanceId: _currentAmbulanceId,
+              ))).then((newId) {
+                if (newId != null && mounted) {
+                  setState(() => _currentAmbulanceId = newId);
+                }
+              });
             }
           },
         ),
       ),
     );
+  }
+
+  Widget _buildTopStatusBanner() {
+    if (_activeEmergency == null) return const SizedBox.shrink();
+    
+    String statusText = "Picking up patient";
+    if (_activeEmergency!.status.index >= EmergencyStatus.patientOnboard.index) {
+      statusText = "Heading to hospital";
+    }
+
+    return Positioned(
+      top: 20,
+      left: 16,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.arrow_back, color: Colors.black87, size: 20),
+            const SizedBox(width: 12),
+            Container(
+              width: 8, height: 8,
+              decoration: const BoxDecoration(color: Color(0xFF3B82F6), shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                statusText,
+                style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            ),
+            const Icon(Icons.add_box_rounded, color: Color(0xFF10B981), size: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRichTripDetails() {
+    if (_activeEmergency == null) return const SizedBox.shrink();
+    bool isPatientOnboard = _activeEmergency!.status.index >= EmergencyStatus.patientOnboard.index;
+    
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32), // Extra bottom padding
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 40, offset: const Offset(0, -10)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag Handle lookalike
+          Container(
+            width: 40, height: 4,
+            margin: const EdgeInsets.only(bottom: 24),
+            decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(2)),
+          ),
+          
+          // Patient Identity & Priority
+          Row(
+           children: [
+             Container(
+               width: 52, height: 52,
+               decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(14)),
+               child: const Icon(Icons.person_pin_rounded, color: Colors.white, size: 30),
+             ),
+             const SizedBox(width: 16),
+             Expanded(
+               child: Column(
+                 crossAxisAlignment: CrossAxisAlignment.start,
+                 children: [
+                   Text(_activeEmergency!.patientName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20)),
+                   const SizedBox(height: 2),
+                   Container(
+                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                     child: Text('PRIORITY: ${_activeEmergency!.priority?.toUpperCase() ?? "URGENT"}', 
+                               style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w900, fontSize: 11)),
+                   ),
+                 ],
+               ),
+             ),
+             Text(_currentAmbulanceId, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w900, fontSize: 12)),
+           ],
+          ),
+          
+          const SizedBox(height: 24),
+          const Divider(height: 1),
+          const SizedBox(height: 24),
+          
+          // Medical Symptoms Card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[100]!)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('MEDICAL NOTES / SYMPTOMS', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                const SizedBox(height: 8),
+                Text(_activeEmergency!.symptoms.isEmpty ? "No symptoms provided by patient." : _activeEmergency!.symptoms,
+                     style: const TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.w500, height: 1.4)),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Location Timeline (Dynamic Locations)
+          Row(
+            children: [
+              Column(
+                children: [
+                  const Icon(Icons.location_on_rounded, color: Colors.blueAccent, size: 24),
+                  Container(width: 2, height: 24, color: Colors.grey[100]),
+                  const Icon(Icons.local_hospital_rounded, color: Colors.green, size: 24),
+                ],
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('PICKUP POINT', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w900)),
+                    Text(_activeEmergency!.location.isEmpty ? "Dynamic Location Point" : _activeEmergency!.location,
+                         maxLines: 1, overflow: TextOverflow.ellipsis,
+                         style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 16)),
+                    const SizedBox(height: 16),
+                    const Text('DESTINATION', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w900)),
+                    Text(_activeEmergency?.hospitalName ?? "Calculating Best Route...",
+                         maxLines: 1, overflow: TextOverflow.ellipsis,
+                         style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 16)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 32),
+          
+          // Real-Time ETA Badges
+          Row(
+            children: [
+              if (!isPatientOnboard)
+                Expanded(child: _miniBadge(Icons.timer_rounded, "TO PATIENT: ${_toPatientEta ?? '...'}", Colors.blueAccent)),
+              if (!isPatientOnboard) const SizedBox(width: 12),
+              Expanded(child: _miniBadge(Icons.domain_rounded, "TO HOSPITAL: ${_toHospitalEta ?? '...'}", isPatientOnboard ? Colors.blueAccent : Colors.grey)),
+            ],
+          ),
+
+          const SizedBox(height: 32),
+          
+          // Action Buttons
+          if (_activeEmergency!.status == EmergencyStatus.accepted)
+            _buildMissionButton('I HAVE ARRIVED AT PICKUP', Colors.green, () async {
+              await _firebaseService.updateEmergencyStatus(_activeEmergency!.id, EmergencyStatus.arrived);
+              setState(() => _activeEmergency = _activeEmergency!.copyWith(status: EmergencyStatus.arrived));
+            }),
+          if (_activeEmergency!.status == EmergencyStatus.arrived)
+            _buildMissionButton('PATIENT SECURED ONBOARD', Colors.blueAccent, () async {
+              await _firebaseService.updateEmergencyStatus(_activeEmergency!.id, EmergencyStatus.patientOnboard);
+              setState(() => _activeEmergency = _activeEmergency!.copyWith(status: EmergencyStatus.patientOnboard));
+            }),
+          if (_activeEmergency!.status == EmergencyStatus.patientOnboard)
+            _buildMissionButton('MISSION COMPLETE / DROP OFF', Colors.black, () async {
+              await _firebaseService.completeEmergency(_activeEmergency!.id);
+              await _firebaseService.updateAmbulanceStatus(widget.uid, false);
+              DashboardScreen.completedTrips.add(_activeEmergency!.id);
+              setState(() {
+                _activeEmergency = null;
+                _routePointsLeg1 = [];
+                _routePointsLeg2 = [];
+              });
+            }, textColor: Colors.white),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMissionButton(String text, Color color, VoidCallback onTap, {Color textColor = Colors.white}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: SizedBox(
+        width: double.infinity,
+        height: 56,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: textColor,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+          onPressed: onTap,
+          child: Text(text, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 14)),
+        ),
+      ),
+    );
+  }
+
+  String _formatDistance(double meters) {
+    if (meters < 1000) return '${meters.toStringAsFixed(0)} m';
+    return '${(meters / 1000).toStringAsFixed(1)} km';
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds < 60) return '< 1 min';
+    return '${(seconds / 60).round()} min';
   }
 
   Widget _miniBadge(IconData icon, String label, Color color) {

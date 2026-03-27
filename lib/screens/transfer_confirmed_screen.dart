@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/models.dart';
 import 'dashboard_screen.dart';
 
@@ -194,9 +195,10 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
                     onPressed: () => Navigator.pushAndRemoveUntil(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => const DashboardScreen(
+                          builder: (_) => DashboardScreen(
                               ambulanceId: 'AMB-001',
-                              driverName: 'Rajesh Patil')),
+                              driverName: 'Rajesh Patil',
+                              uid: FirebaseAuth.instance.currentUser?.uid ?? 'unknown')),
                       (r) => false,
                     ),
                     style: ElevatedButton.styleFrom(

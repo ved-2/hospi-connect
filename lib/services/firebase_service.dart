@@ -20,17 +20,37 @@ class FirebaseService {
     }
     return _firestore!.collection('ambulances').snapshots().map((snapshot) {
       final map = <String, LatLng>{};
+      final now = DateTime.now();
+      
       for (final doc in snapshot.docs) {
         final data = doc.data();
         
+        // Filter out stale/demo data that hasn't updated in 10 minutes
+        final lastUpdated = data['lastUpdated'];
+        if (lastUpdated != null) {
+          DateTime updateTime;
+          if (lastUpdated is Timestamp) {
+            updateTime = lastUpdated.toDate();
+          } else {
+            updateTime = DateTime.parse(lastUpdated.toString());
+          }
+          
+          if (now.difference(updateTime).inMinutes > 10) {
+            continue; // Ignore record
+          }
+        } else {
+          // If no timestamp, it's definitely old/demo data
+          continue; 
+        }
+
         // Skip ambulances currently occupied with an emergency
         final bool isBusy = data['isBusy'] == true;
         if (isBusy) continue;
         
-        final lat = data['gpsLat'];
-        final lng = data['gpsLng'];
-        if (lat is num && lng is num) {
-          map[doc.id] = LatLng(lat.toDouble(), lng.toDouble());
+        final lat = _asDouble(data['gpsLat']);
+        final lng = _asDouble(data['gpsLng']);
+        if (lat != 0.0 && lng != 0.0) {
+          map[doc.id] = LatLng(lat, lng);
         }
       }
       return map;
@@ -48,6 +68,68 @@ class FirebaseService {
     }
   }
 
+  Future<Hospital?> getHospitalById(String hospitalId) async {
+    if (_firestore == null) return null;
+    try {
+      final doc = await _firestore!.collection('hospitals').doc(hospitalId).get();
+      if (!doc.exists) return null;
+      final data = doc.data()!;
+      
+      final beds = data['beds'] as Map<String, dynamic>? ?? {};
+      final icu = beds['icu'] as Map<String, dynamic>? ?? {};
+      final emergency = beds['emergency'] as Map<String, dynamic>? ?? {};
+      final resources = data['resources'] as Map<String, dynamic>? ?? {};
+      
+      final icuAvail = _asInt(icu['available']);
+      final oxyTotal = _asInt(emergency['total']);
+      final hasEmergencyOT = (data['hasEmergencyOT'] as bool?) ?? (resources['emergencyOT'] as bool?) ?? (oxyTotal > 0);
+
+      return Hospital(
+        id: doc.id,
+        name: data['name'] as String? ?? 'Hospital',
+        address: data['address'] as String? ?? 'Unknown Address',
+        distanceKm: 0.0, // Calculated locally later
+        icuAvailable: icuAvail,
+        icuTotal: _asInt(icu['total']),
+        ventilatorsAvailable: _asInt(resources['ventilators']),
+        ventilatorsTotal: _asInt(resources['ventilators']),
+        oxygenBedsAvailable: _asInt(emergency['available']),
+        oxygenBedsTotal: oxyTotal,
+        hasEmergencyOT: hasEmergencyOT,
+        specialties: (data['specialties'] as List?)?.whereType<String>().toList() ?? [],
+        phone: data['phone'] as String? ?? 'N/A',
+        latitude: _asDouble(data['gpsLat']),
+        longitude: _asDouble(data['gpsLng']),
+        matchScore: 0.0,
+      );
+    } catch (e) {
+      AppLogger.log('Error getHospitalById: $e');
+      return null;
+    }
+  }
+
+  Future<EmergencyModel?> getActiveEmergencyForDriver(String ambulanceId) async {
+    if (_firestore == null) return null;
+    try {
+      final snap = await _firestore!
+          .collection('emergencies')
+          .where('ambulanceId', isEqualTo: ambulanceId)
+          .where('status', whereIn: [
+            EmergencyStatus.accepted.value,
+            EmergencyStatus.arrived.value,
+            EmergencyStatus.patientOnboard.value
+          ])
+          .limit(1)
+          .get();
+      
+      if (snap.docs.isEmpty) return null;
+      return EmergencyModel.fromFirestore(snap.docs.first);
+    } catch (e) {
+      AppLogger.log('Error getActiveEmergencyForDriver: $e');
+      return null;
+    }
+  }
+
   Stream<List<EmergencyModel>> getPendingEmergencies() {
     if (_firestore == null) {
       AppLogger.log('Firestore NOT available in getPendingEmergencies');
@@ -55,8 +137,6 @@ class FirebaseService {
     }
     
     // We strictly only want real recent SOS requests, NOT old demo dataset trips
-    final cutoffTimestamp = Timestamp.fromDate(DateTime.now().subtract(const Duration(minutes: 15)));
-    
     AppLogger.log('Starting getPendingEmergencies stream (Filtering for NEW SOS only)...');
     return _firestore!
         .collection('emergencies')
@@ -222,6 +302,8 @@ class FirebaseService {
           hasEmergencyOT: hasEmergencyOT,
           specialties: specialties,
           phone: data['phone'] as String? ?? 'N/A',
+          latitude: _asDouble(data['gpsLat']),
+          longitude: _asDouble(data['gpsLng']),
           matchScore: matchScore,
         );
       }).toList();
@@ -233,7 +315,7 @@ class FirebaseService {
     }
   }
 
-  Future<void> acceptEmergency(String emergencyId, String ambulanceId) async {
+  Future<void> acceptEmergency(String emergencyId, String ambulanceId, {int? eta}) async {
     if (_firestore == null) return;
     try {
       await _firestore!.collection('emergencies').doc(emergencyId).set({
@@ -241,8 +323,9 @@ class FirebaseService {
         'ambulanceId': ambulanceId,
         'acceptedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        if (eta != null) 'eta': eta,
       }, SetOptions(merge: true));
-      AppLogger.log('Successfully accepted emergency $emergencyId');
+      AppLogger.log('Successfully accepted emergency $emergencyId with eta: $eta');
     } catch (e) {
       AppLogger.log('Error accepting emergency: $e');
     }
@@ -298,6 +381,18 @@ class FirebaseService {
     }
   }
 
+  Future<void> updateAmbulanceId(String uid, String newAmbulanceId) async {
+    if (_firestore == null) return;
+    try {
+      await _firestore!.collection('ambulances').doc(uid).set({
+        'ambulanceId': newAmbulanceId,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      AppLogger.log('Error updating ambulance ID: $e');
+    }
+  }
+
   int _asInt(dynamic v) {
     if (v is int) return v;
     if (v is num) return v.toInt();
@@ -305,13 +400,22 @@ class FirebaseService {
     return 0;
   }
 
+  double _asDouble(dynamic v) {
+    if (v is double) return v;
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
+  }
+
   double _distanceKm(LatLng? userLocation, dynamic lat, dynamic lng) {
     if (userLocation == null) return 9999;
-    if (lat is! num || lng is! num) return 9999;
+    final lat2 = _asDouble(lat);
+    final lon2 = _asDouble(lng);
+    if (lat2 == 0.0 || lon2 == 0.0) return 9999;
+
     final lat1 = userLocation.latitude;
     final lon1 = userLocation.longitude;
-    final lat2 = lat.toDouble();
-    final lon2 = lng.toDouble();
+    
     const r = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
     final dLon = _deg2rad(lon2 - lon1);

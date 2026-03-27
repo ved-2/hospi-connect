@@ -65,6 +65,10 @@ class EmergencyModel {
   final String location;
   final EmergencyStatus status;
   final String? hospitalId;
+  final String? hospitalName;
+  final String? hospitalAddress;
+  final double? hospitalLat;
+  final double? hospitalLng;
   final String? ambulanceId;
   final String? priority;
   final int? eta;
@@ -72,6 +76,8 @@ class EmergencyModel {
   final String transportType;
   final bool guardianAlerted;
   final DateTime? createdAt;
+  final DateTime? acceptedAt;
+  final DateTime? completedAt;
 
   EmergencyModel({
     required this.id,
@@ -83,6 +89,10 @@ class EmergencyModel {
     this.location = '',
     this.status = EmergencyStatus.pending,
     this.hospitalId,
+    this.hospitalName,
+    this.hospitalAddress,
+    this.hospitalLat,
+    this.hospitalLng,
     this.ambulanceId,
     this.priority,
     this.eta,
@@ -90,6 +100,8 @@ class EmergencyModel {
     this.transportType = 'ambulance',
     this.guardianAlerted = false,
     this.createdAt,
+    this.acceptedAt,
+    this.completedAt,
   });
 
   factory EmergencyModel.fromFirestore(DocumentSnapshot doc) {
@@ -99,11 +111,19 @@ class EmergencyModel {
       patientId: data['patientId'] ?? '',
       patientName: data['patientName'] ?? '',
       symptoms: data['symptoms'] ?? '',
-      latitude: (data['gpsLat'] ?? 0).toDouble(),
-      longitude: (data['gpsLng'] ?? 0).toDouble(),
+      latitude: double.tryParse((data['gpsLat'] ?? data['latitude'] ?? data['lat'] ?? '0').toString()) ?? 0.0,
+      longitude: double.tryParse((data['gpsLng'] ?? data['longitude'] ?? data['lng'] ?? '0').toString()) ?? 0.0,
       location: data['location'] ?? '',
       status: EmergencyStatusExtension.fromString(data['status'] ?? 'pending'),
       hospitalId: data['hospitalId'],
+      hospitalName: data['hospitalName'],
+      hospitalAddress: data['hospitalAddress'],
+      hospitalLat: data['hospitalLat'] != null 
+          ? double.tryParse(data['hospitalLat'].toString()) 
+          : (data['hLat'] != null ? double.tryParse(data['hLat'].toString()) : null),
+      hospitalLng: data['hospitalLng'] != null 
+          ? double.tryParse(data['hospitalLng'].toString()) 
+          : (data['hLng'] != null ? double.tryParse(data['hLng'].toString()) : null),
       ambulanceId: data['ambulanceId'],
       priority: data['priority'],
       eta: data['eta'],
@@ -111,6 +131,8 @@ class EmergencyModel {
       transportType: data['transportType'] ?? 'ambulance',
       guardianAlerted: data['guardianAlerted'] ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      acceptedAt: (data['acceptedAt'] as Timestamp?)?.toDate(),
+      completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -124,6 +146,10 @@ class EmergencyModel {
       'location': location,
       'status': status.value,
       'hospitalId': hospitalId,
+      'hospitalName': hospitalName,
+      'hospitalAddress': hospitalAddress,
+      'hospitalLat': hospitalLat,
+      'hospitalLng': hospitalLng,
       'ambulanceId': ambulanceId,
       'priority': priority ?? 'high',
       'eta': eta,
@@ -131,14 +157,22 @@ class EmergencyModel {
       'transportType': transportType,
       'guardianAlerted': guardianAlerted,
       'createdAt': createdAt ?? FieldValue.serverTimestamp(),
+      'acceptedAt': acceptedAt,
+      'completedAt': completedAt,
     };
   }
 
   EmergencyModel copyWith({
     EmergencyStatus? status,
     String? hospitalId,
+    String? hospitalName,
+    String? hospitalAddress,
+    double? hospitalLat,
+    double? hospitalLng,
     String? ambulanceId,
     int? eta,
+    DateTime? acceptedAt,
+    DateTime? completedAt,
   }) {
     return EmergencyModel(
       id: id,
@@ -150,10 +184,16 @@ class EmergencyModel {
       location: location,
       status: status ?? this.status,
       hospitalId: hospitalId ?? this.hospitalId,
+      hospitalName: hospitalName ?? this.hospitalName,
+      hospitalAddress: hospitalAddress ?? this.hospitalAddress,
+      hospitalLat: hospitalLat ?? this.hospitalLat,
+      hospitalLng: hospitalLng ?? this.hospitalLng,
       ambulanceId: ambulanceId ?? this.ambulanceId,
       priority: priority,
       eta: eta ?? this.eta,
       createdAt: createdAt,
+      acceptedAt: acceptedAt ?? this.acceptedAt,
+      completedAt: completedAt ?? this.completedAt,
     );
   }
 }

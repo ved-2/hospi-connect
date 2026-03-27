@@ -51,6 +51,8 @@ class Hospital {
   final bool hasEmergencyOT;
   final List<String> specialties;
   final String phone;
+  final double latitude;
+  final double longitude;
   final double matchScore; // 0-100, computed from patient needs
 
   const Hospital({
@@ -67,6 +69,8 @@ class Hospital {
     required this.hasEmergencyOT,
     required this.specialties,
     required this.phone,
+    required this.latitude,
+    required this.longitude,
     required this.matchScore,
   });
 }
@@ -197,16 +201,29 @@ class DiseaseMapper {
     double dist,
   ) {
     double score = 0;
-    if (req.needsICU) score += icuAvail > 0 ? 30 : -20;
-    if (req.needsVentilator) score += ventAvail > 0 ? 25 : -15;
-    if (req.needsOxygenBed) score += oxyAvail > 0 ? 15 : -10;
-    if (req.needsEmergencyOT) score += ot ? 15 : -10;
-    if (specs.contains(req.specialDept)) score += 20;
-    final total = icuTotal + ventTotal + oxyTotal;
+    
+    // Resource Availability (Primary Focus: Most Beds)
+    if (req.needsICU) score += icuAvail > 0 ? (40 + icuAvail * 2) : -30;
+    if (req.needsVentilator) score += ventAvail > 0 ? (30 + ventAvail * 2) : -20;
+    if (req.needsOxygenBed) score += oxyAvail > 0 ? (20 + oxyAvail) : -10;
+    if (req.needsEmergencyOT) score += ot ? 20 : -10;
+    
+    // Specialty Match
+    if (specs.contains(req.specialDept)) score += 25;
+    
+    // Total Capacity Bonus (Prioritize larger hospitals if they have room)
+    final totalCapacity = icuTotal + ventTotal + oxyTotal;
+    score += (totalCapacity / 20).clamp(0, 15);
+
+    // Distance Penalty (Nearest)
+    // 1km distance = -5 score. Highly sensitive to proximity.
+    score -= dist * 5.0; 
+    
+    // Load Penalty (Avoid fully occupied hospitals)
     final available = icuAvail + ventAvail + oxyAvail;
-    final loadPercent = total > 0 ? 1 - (available / total) : 1.0;
-    score -= dist * 3.0; // closer = better
-    score -= (loadPercent.clamp(0.0, 1.0) * 20); // penalize high load
+    final loadPercent = totalCapacity > 0 ? 1 - (available / totalCapacity) : 1.0;
+    score -= (loadPercent.clamp(0.0, 1.0) * 30); 
+    
     return score.clamp(0, 100);
   }
 }
@@ -228,6 +245,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Cardiology', 'Neurology', 'Trauma Surgery', 'Critical Care'],
         phone: '+91-20-26163391',
+        latitude: 18.5304, longitude: 73.8767,
         matchScore: DiseaseMapper.computeScore(req, 3, 10, 2, 5, 6, 15, true,
             ['Cardiology', 'Neurology', 'Trauma Surgery', 'Critical Care'], 2.1),
       ),
@@ -242,6 +260,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Cardiology', 'Pulmonology', 'Nephrology', 'Obstetrics & Gynaecology'],
         phone: '+91-20-66814444',
+        latitude: 18.5324, longitude: 73.8787,
         matchScore: DiseaseMapper.computeScore(req, 1, 8, 0, 4, 4, 12, true,
             ['Cardiology', 'Pulmonology', 'Nephrology', 'Obstetrics & Gynaecology'], 2.8),
       ),
@@ -256,6 +275,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Trauma Surgery', 'Pulmonology', 'Critical Care', 'Burns & Plastic Surgery'],
         phone: '+91-20-26126300',
+        latitude: 18.5204, longitude: 73.8657,
         matchScore: DiseaseMapper.computeScore(req, 5, 20, 4, 10, 10, 30, true,
             ['Trauma Surgery', 'Pulmonology', 'Critical Care', 'Burns & Plastic Surgery'], 3.5),
       ),
@@ -270,6 +290,7 @@ class MockData {
         hasEmergencyOT: false,
         specialties: ['Neurology', 'Endocrinology', 'Emergency Medicine', 'General Medicine'],
         phone: '+91-20-67210000',
+        latitude: 18.5144, longitude: 73.8407,
         matchScore: DiseaseMapper.computeScore(req, 2, 12, 1, 6, 8, 20, false,
             ['Neurology', 'Endocrinology', 'Emergency Medicine', 'General Medicine'], 4.2),
       ),
@@ -284,6 +305,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['Nephrology', 'Obstetrics & Gynaecology', 'Cardiology', 'Critical Care'],
         phone: '+91-20-49153000',
+        latitude: 18.5084, longitude: 73.8297,
         matchScore: DiseaseMapper.computeScore(req, 4, 15, 3, 8, 12, 25, true,
             ['Nephrology', 'Obstetrics & Gynaecology', 'Cardiology', 'Critical Care'], 5.7),
       ),
@@ -298,6 +320,7 @@ class MockData {
         hasEmergencyOT: true,
         specialties: ['General Medicine', 'Emergency Medicine'],
         phone: '+91-20-26128000',
+        latitude: 18.5284, longitude: 73.8737,
         matchScore: DiseaseMapper.computeScore(req, 0, 18, 0, 7, 2, 22, true,
             ['General Medicine', 'Emergency Medicine'], 1.5),
       ),

@@ -64,7 +64,6 @@ class _PatientEntryScreenState extends State<PatientEntryScreen> {
   Widget build(BuildContext context) {
     const primaryRed = Color(0xFFFF3B30);
     const bgColor = Color(0xFF0B0E14);
-    const surfaceColor = Color(0xFF161B26);
     const inputColor = Color(0xFF1C2333);
 
     return Scaffold(

@@ -17,7 +17,7 @@ class BlinkitTheme {
     color: surface,
     borderRadius: BorderRadius.circular(20),
     boxShadow: [
-      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+      BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4)),
     ],
   );
 }
@@ -44,7 +44,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             style: TextStyle(color: BlinkitTheme.textDark, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 16)),
         centerTitle: true,
         elevation: 0.5,
-        shadowColor: Colors.black.withOpacity(0.2),
+        shadowColor: Colors.black.withValues(alpha: 0.2),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: BlinkitTheme.textDark, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -186,7 +186,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: severityColor.withOpacity(0.15),
+                    color: severityColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(Icons.medical_information_rounded,
@@ -222,7 +222,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: severityColor.withOpacity(0.1),
+                        color: severityColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(severity.toUpperCase(),
@@ -263,7 +263,7 @@ class HistoryDetailScreen extends StatelessWidget {
             style: TextStyle(color: BlinkitTheme.textDark, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 16)),
         centerTitle: true,
         elevation: 0.5,
-        shadowColor: Colors.black.withOpacity(0.2),
+        shadowColor: Colors.black.withValues(alpha: 0.2),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: BlinkitTheme.textDark, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -320,11 +320,45 @@ class HistoryDetailScreen extends StatelessWidget {
           _infoRow('HOSPITAL DST', hospitalName.toUpperCase()),
           _infoRow('ASSIGNED UNIT', (emergency.ambulanceId ?? 'UNSPECIFIED').toUpperCase()),
           _infoRow('TRANS TYPE', emergency.transportType.toUpperCase()),
-          _infoRow('EST TRAVEL', '${emergency.eta ?? "N/A"} MINS'),
-          _infoRow('TIMESTAMP', emergency.createdAt?.toString().toUpperCase() ?? 'N/A'),
+          _infoRow('EST TRAVEL', _calculateTravelTime(emergency)),
+          _infoRow('DISPATCHED', _formatFullTime(emergency.acceptedAt)),
+          _infoRow('COMPLETED', _formatFullTime(emergency.completedAt)),
         ],
       ),
     );
+  }
+
+  String _formatFullTime(DateTime? dt) {
+    if (dt == null) return 'PENDING';
+    final month = _monthName(dt.month);
+    final day = dt.day;
+    final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$day $month, $hour:$minute $ampm';
+  }
+
+  String _monthName(int m) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    if (m < 1 || m > 12) return '';
+    return months[m - 1];
+  }
+
+  String _calculateTravelTime(EmergencyModel e) {
+    if (e.completedAt != null && e.acceptedAt != null) {
+      final diff = e.completedAt!.difference(e.acceptedAt!);
+      final minutes = diff.inMinutes;
+      final seconds = diff.inSeconds % 60;
+      if (minutes == 0) return '$seconds SECS (ACTUAL TRIP)';
+      return '$minutes MIN $seconds SEC (ACTUAL)';
+    }
+    if (e.eta != null) {
+      return '${e.eta} MINS (ESTIMATED)';
+    }
+    return 'CALCULATING...';
   }
 
   Widget _infoRow(String label, String value) {
@@ -336,7 +370,7 @@ class HistoryDetailScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: BlinkitTheme.borderLight),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2)),
         ]
       ),
       child: Row(

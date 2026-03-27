@@ -51,24 +51,14 @@ class LocationService {
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
       AppLogger.log('Position found: ${position.latitude}, ${position.longitude}');
-      
-      // Override for bad demo locations (e.g., Chrome defaulting to Europe or US)
-      if (position.longitude < 60 || position.longitude > 100 || position.latitude < 5 || position.latitude > 40) {
-        AppLogger.log('Location way out of bounds (probably wrong Chrome/Emulator test GPS), mocking to Pune');
-        return const LatLng(18.5300, 73.8500); // Simulate ambulance in Pune
-      }
-
       return LatLng(position.latitude, position.longitude);
     } catch (e) {
       AppLogger.log('Error getting current location: $e');
       final lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null) {
-        if (lastKnown.longitude < 60 || lastKnown.longitude > 100) {
-           return const LatLng(18.5300, 73.8500);
-        }
         return LatLng(lastKnown.latitude, lastKnown.longitude);
       }
-      return const LatLng(18.5300, 73.8500); // Fallback to Pune unconditionally
+      return null; 
     }
   }
 
@@ -79,42 +69,25 @@ class LocationService {
           accuracy: LocationAccuracy.high,
           distanceFilter: 10,
         ),
-      ).map((position) {
-         if (position.longitude < 60 || position.longitude > 100 || position.latitude < 5 || position.latitude > 40) {
-           return const LatLng(18.5300, 73.8500);
-         }
-         return LatLng(position.latitude, position.longitude);
-      });
+      ).map((position) => LatLng(position.latitude, position.longitude));
       return;
     } catch (e) {
       AppLogger.log('Location stream error: $e');
     }
 
-    // Fallback: poll current position periodically, then mock if unavailable.
     while (true) {
       await Future.delayed(const Duration(seconds: 10));
       try {
         final pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
         );
-        if (pos.longitude < 60 || pos.longitude > 100 || pos.latitude < 5 || pos.latitude > 40) {
-           yield const LatLng(18.5300, 73.8500);
-        } else {
-           yield LatLng(pos.latitude, pos.longitude);
-        }
-        continue;
+        yield LatLng(pos.latitude, pos.longitude);
       } catch (_) {
         final lastKnown = await Geolocator.getLastKnownPosition();
         if (lastKnown != null) {
-          if (lastKnown.longitude < 60 || lastKnown.longitude > 100) {
-             yield const LatLng(18.5300, 73.8500);
-          } else {
-             yield LatLng(lastKnown.latitude, lastKnown.longitude);
-          }
-          continue;
+          yield LatLng(lastKnown.latitude, lastKnown.longitude);
         }
       }
-      yield const LatLng(18.5300, 73.8500);
     }
   }
 }
