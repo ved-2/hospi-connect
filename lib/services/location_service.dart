@@ -58,10 +58,7 @@ class LocationService {
       if (lastKnown != null) {
         return LatLng(lastKnown.latitude, lastKnown.longitude);
       }
-      if (defaultTargetPlatform == TargetPlatform.windows) {
-        return const LatLng(18.5204, 73.8567); // Fallback
-      }
-      return null;
+      return null; 
     }
   }
 
@@ -78,7 +75,6 @@ class LocationService {
       AppLogger.log('Location stream error: $e');
     }
 
-    // Fallback: poll current position periodically, then mock if unavailable.
     while (true) {
       await Future.delayed(const Duration(seconds: 10));
       try {
@@ -86,16 +82,11 @@ class LocationService {
           locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
         );
         yield LatLng(pos.latitude, pos.longitude);
-        continue;
       } catch (_) {
         final lastKnown = await Geolocator.getLastKnownPosition();
         if (lastKnown != null) {
           yield LatLng(lastKnown.latitude, lastKnown.longitude);
-          continue;
         }
-      }
-      if (defaultTargetPlatform == TargetPlatform.windows) {
-        yield const LatLng(18.5204, 73.8567);
       }
     }
   }

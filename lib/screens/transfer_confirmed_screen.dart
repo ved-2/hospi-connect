@@ -1,29 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/models.dart';
-
-// --- Blinkit Design System ---
-class BlinkitTheme {
-  static const Color background = Color(0xFFF4F6F8); // Light gray-blue
-  static const Color surface = Color(0xFFFFFFFF); // Pure White
-  static const Color brandYellow = Color(0xFFF8CB46); // Blinkit Yellow
-  static const Color textDark = Color(0xFF000000); // Pure Black
-  static const Color textSecondary = Color(0xFF6B7280); // Gray
-  static const Color alertRed = Color(0xFFE53935); // Emergency Red
-  static const Color successGreen = Color(0xFF0C9547); // Blinkit Green
-  static const Color accentPurple = Color(0xFF8B5CF6); // Info Purple
-  static const Color borderLight = Color(0xFFE5E7EB);
-  
-  static BoxDecoration cardDecoration = BoxDecoration(
-    color: surface,
-    borderRadius: BorderRadius.circular(20),
-    border: Border.all(color: borderLight),
-    boxShadow: [
-      BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-    ],
-  );
-}
+import 'dashboard_screen.dart';
 
 class TransferConfirmedScreen extends StatefulWidget {
   final Hospital hospital;
@@ -64,11 +42,13 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Logic kept entirely intact
+    const primaryRed = Color(0xFFFF3B30);
+    const bgColor = Color(0xFF0B0E14);
+    const surfaceColor = Color(0xFF161B26);
     final eta = (widget.hospital.distanceKm * 3).round();
 
     return Scaffold(
-      backgroundColor: BlinkitTheme.background,
+      backgroundColor: bgColor,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -85,12 +65,12 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
                     width: 120,
                     height: 120,
                     decoration: BoxDecoration(
-                      color: BlinkitTheme.successGreen.withOpacity(0.1),
+                      color: const Color(0xFF32D74B).withValues(alpha: 0.1),
                       shape: BoxShape.circle,
-                      border: Border.all(color: BlinkitTheme.successGreen.withOpacity(0.3), width: 3),
+                      border: Border.all(color: const Color(0xFF32D74B).withValues(alpha: 0.3), width: 3),
                     ),
-                    child: const Icon(LucideIcons.check,
-                        color: BlinkitTheme.successGreen, size: 60),
+                    child: const Icon(Icons.check_rounded,
+                        color: Color(0xFF32D74B), size: 60),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -98,16 +78,16 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
                 const Text(
                   'TRANSFER CONFIRMED',
                   style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.w900,
-                      color: BlinkitTheme.textDark,
-                      letterSpacing: 1),
+                      color: Colors.white,
+                      letterSpacing: 2),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   'Emergency request sent to ${widget.hospital.name}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: BlinkitTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 40),
 
@@ -115,42 +95,37 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(28),
-                  decoration: BlinkitTheme.cardDecoration,
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: const Color(0xFF007AFF).withValues(alpha: 0.3)),
+                  ),
                   child: Column(
                     children: [
-                      const Text('ESTIMATED ARRIVAL',
+                      Text('ESTIMATED ARRIVAL',
                           style: TextStyle(
-                              color: BlinkitTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                              color: Colors.white.withValues(alpha: 0.3), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                       const SizedBox(height: 12),
                       Text(
                         '$eta',
                         style: const TextStyle(
-                            color: BlinkitTheme.textDark,
-                            fontSize: 64,
-                            height: 1,
+                            color: Color(0xFF007AFF),
+                            fontSize: 56,
                             fontWeight: FontWeight.w900),
                       ),
-                      const SizedBox(height: 4),
                       const Text(
                         'MINUTES',
                         style: TextStyle(
-                            color: BlinkitTheme.textDark,
-                            fontSize: 14,
+                            color: Color(0xFF007AFF),
+                            fontSize: 12,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5),
+                            letterSpacing: 2),
                       ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: BlinkitTheme.background,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${widget.hospital.distanceKm} km to destination',
-                          style: const TextStyle(
-                              color: BlinkitTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${widget.hospital.distanceKm} km to destination',
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.2), fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -159,16 +134,16 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
 
                 // Hospital info
                 _infoCard(
-                  icon: LucideIcons.building,
-                  color: BlinkitTheme.alertRed,
+                  icon: Icons.local_hospital_rounded,
+                  color: primaryRed,
                   title: 'DESTINATION',
                   value: widget.hospital.name,
                   subtitle: widget.hospital.address,
                 ),
                 const SizedBox(height: 12),
                 _infoCard(
-                  icon: LucideIcons.user,
-                  color: BlinkitTheme.textDark,
+                  icon: Icons.person_rounded,
+                  color: const Color(0xFF32D74B),
                   title: 'PATIENT',
                   value: widget.patient.name,
                   subtitle:
@@ -176,8 +151,8 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
                 ),
                 const SizedBox(height: 12),
                 _infoCard(
-                  icon: LucideIcons.phoneCall,
-                  color: BlinkitTheme.successGreen,
+                  icon: Icons.phone_rounded,
+                  color: const Color(0xFFAF52DE),
                   title: 'HOSPITAL CONTACT',
                   value: widget.hospital.phone,
                   subtitle: 'Call now to alert ER team',
@@ -189,23 +164,22 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: BlinkitTheme.brandYellow.withOpacity(0.15),
+                    color: const Color(0xFFFF9500).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: BlinkitTheme.brandYellow.withOpacity(0.5)),
+                    border: Border.all(color: const Color(0xFFFF9500).withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(LucideIcons.bellRing,
-                          color: Color(0xFFD97706), size: 24), // Darker amber for contrast
+                      const Icon(Icons.notifications_active_rounded,
+                          color: Color(0xFFFF9500), size: 20),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Text(
                           'Hospital ER has been alerted. They are preparing resources for your arrival.',
                           style: TextStyle(
-                              color: const Color(0xFFB45309), // Darker amber text for readability
-                              fontSize: 13,
-                              height: 1.4,
-                              fontWeight: FontWeight.w700),
+                              color: const Color(0xFFFF9500).withValues(alpha: 0.8),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -214,23 +188,30 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
 
                 const SizedBox(height: 40),
 
-                // Back to Dashboard Button
                 SizedBox(
                   width: double.infinity,
                   height: 60,
                   child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
+                    onPressed: () => Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => DashboardScreen(
+                              ambulanceId: 'AMB-001',
+                              driverName: 'Rajesh Patil',
+                              uid: FirebaseAuth.instance.currentUser?.uid ?? 'unknown')),
+                      (r) => false,
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: BlinkitTheme.textDark, // High contrast black button
+                      backgroundColor: primaryRed,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                          borderRadius: BorderRadius.circular(20)),
                       elevation: 0,
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(LucideIcons.map, size: 20),
+                        Icon(Icons.explore_rounded, size: 20),
                         SizedBox(width: 10),
                         Text('BACK TO DASHBOARD',
                             style: TextStyle(
@@ -239,7 +220,6 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -255,19 +235,24 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
     required String value,
     required String subtitle,
   }) {
+    const surfaceColor = Color(0xFF161B26);
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BlinkitTheme.cardDecoration,
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
       child: Row(
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(14),
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -276,17 +261,17 @@ class _TransferConfirmedScreenState extends State<TransferConfirmedScreen>
               children: [
                 Text(title,
                     style: const TextStyle(
-                        color: BlinkitTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                        color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
                 const SizedBox(height: 4),
                 Text(value,
                     style: const TextStyle(
                         fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                        color: BlinkitTheme.textDark)),
+                        fontSize: 15,
+                        color: Colors.white)),
                 const SizedBox(height: 2),
                 Text(subtitle,
-                    style: const TextStyle(
-                        color: BlinkitTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.3), fontSize: 11)),
               ],
             ),
           ),
