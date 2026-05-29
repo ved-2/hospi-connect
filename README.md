@@ -1,36 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 🚑 HospiConnect – Emergency Healthcare Coordination Platform
 
-## Getting Started
+**Connecting Hospitals. Saving Lives.**
 
-First, run the development server:
- 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+HospiConnect is a real-time healthcare coordination platform that connects **patients, ambulances, and hospitals** to reduce emergency delays and improve medical resource utilization.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## 📌 Overview
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+In emergency situations, patients often waste critical time searching for hospitals with available ICU beds. Hospitals operate in silos, and ambulances lack real-time coordination.
 
-## Learn More
+HospiConnect solves this by enabling:
 
-To learn more about Next.js, take a look at the following resources:
+• Patient → Hospital connection (SOS emergency system)  
+• Hospital → Hospital coordination (resource sharing & transfer)  
+• Ambulance → Real-time dispatch & tracking  
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🔗 Project Repositories
 
-## Deploy on Vercel
+### 🌐 Hospital Dashboard (Web)
+👉 https://github.com/ved-2/Prayatna-3.0.git  
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+• Manage ICU beds and resources  
+• View incoming patients  
+• Monitor ambulance ETA  
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+  
+### 📱 Citizen App (Mobile)
+👉 https://github.com/ved-2/Citizen-Mobile.git  
+
+• One-tap SOS emergency request  
+• View nearby hospitals  
+• Track ambulance in real-time  
+
+---
+
+### 🚑 Ambulance App (Mobile)
+👉 https://github.com/ved-2/hospi-connect.git  
+📍 Branch: `ambulance`
+
+• Receive emergency requests  
+• Live GPS tracking  
+• Update status (Enroute, Arrived, Completed)
+
+---
+
+## ⚙️ Tech Stack
+
+Frontend:
+• Flutter (Mobile Apps)  
+• Web Dashboard  
+
+Backend:
+• Fire Base cloud functions
+
+Database & Realtime:
+• Firebase (Auth + Firestore)  
+
+AI:
+• Gemini 
+
+---
+
+## 🧠 Key Features
+
+• 🚨 SOS Emergency System  
+• 🏥 Smart Hospital Selection  
+• 🚑 Real-Time Ambulance Tracking  
+• 🔄 Hospital-to-Hospital Transfer  
+• 📊 Hospital Resource Dashboard  
+• 🤖 AI-Based Symptom Analysis  
+
+---
+
+## 🔄 System Workflow
+
+1. Patient triggers SOS  
+2. System captures location & symptoms  
+3. AI determines priority & department  
+4. Backend selects best hospital  
+5. Ambulance is dispatched  
+6. Patient tracks ambulance live  
+7. Hospital receives incoming alert  
+
+---
+
+## 🎯 Impact
+
+• Faster emergency response  
+• Better ICU utilization  
+• Reduced patient transfer delays  
+• Improved healthcare coordination  
+
+---
+
+## 🚀 Future Scope
+
+• Government healthcare integration  
+• Multi-city deployment  
+• Voice-based SOS  
+• Advanced AI predictions  
+
+---
+
+## 👨‍💻 Team
+
+Team Name: Neural Ninjas
+
+---
+
+## 📌 Note
+
+This project is modularized into multiple repositories for better scalability.  
+All components are linked above for easy access.
