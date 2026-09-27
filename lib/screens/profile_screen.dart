@@ -115,7 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 4),
                     const Text(
                       'Emergency Dispatch Operator',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         color: textSecondary,
                         letterSpacing: 0.5,
@@ -220,10 +220,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Icon(Icons.logout_rounded, color: primaryRed, size: 20),
                         SizedBox(width: 12),
-                        const Text(
+                        Text(
                           'SECURE LOGOUT',
                           style: TextStyle(
                             color: primaryRed,

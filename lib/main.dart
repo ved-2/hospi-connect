@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/login_screen.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'services/firebase_service.dart';
@@ -60,7 +60,8 @@ class AmbulanceApp extends StatelessWidget {
         ),
         cardTheme: CardThemeData(
           color: const Color(0xFF161B26),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           elevation: 0,
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -68,7 +69,8 @@ class AmbulanceApp extends StatelessWidget {
             backgroundColor: const Color(0xFFFF3B30),
             foregroundColor: Colors.white,
             minimumSize: const Size(double.infinity, 56),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
             textStyle: const TextStyle(
               fontSize: 16,
@@ -104,11 +106,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
       (user) async {
         if (!mounted) return;
         if (user == null) {
-          setState(() { _user = null; _loading = false; });
+          setState(() {
+            _user = null;
+            _loading = false;
+          });
         } else {
           final data = await FirebaseService().getAmbulanceData(user.uid);
           if (!mounted) return;
-          setState(() { _user = user; _ambulanceData = data; _loading = false; });
+          setState(() {
+            _user = user;
+            _ambulanceData = data;
+            _loading = false;
+          });
         }
       },
       onError: (e) {
@@ -128,7 +137,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (_loading) {
       return const Scaffold(
         backgroundColor: Color(0xFF090A0F),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFF007AFF))),
+        body:
+            Center(child: CircularProgressIndicator(color: Color(0xFF007AFF))),
       );
     }
     if (_user == null) return const LoginScreen();
